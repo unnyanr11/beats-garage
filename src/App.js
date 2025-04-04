@@ -5,9 +5,9 @@ import FeaturedBeats from "./components/FeaturedBeats";
 import Filters from "./components/Filters";  
 import Footer from "./components/Footer";  
 
-function App() {  
+const App = () => {  
     return (  
-        <div className="bg-black text-white font-sans">  
+        <div className="bg-black text-white">  
             <Header />  
             <HeroSection />  
             <FeaturedBeats />  
@@ -15,6 +15,6 @@ function App() {
             <Footer />  
         </div>  
     );  
-}  
+};  
 
 export default App;  

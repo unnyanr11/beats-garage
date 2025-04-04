@@ -9,34 +9,31 @@ const FeaturedBeats = () => {
 
     const [playingAudio, setPlayingAudio] = useState(null);  
 
-    const togglePlayPause = (audioId, audio) => {  
-        if (playingAudio && playingAudio !== audio) {  
+    const togglePlayPause = (audioId, audioElement) => {  
+        if (playingAudio && playingAudio !== audioElement) {  
             playingAudio.pause();  
-            setPlayingAudio(null);  
+            playingAudio.currentTime = 0;  
         }  
-
-        if (audio.paused) {  
-            audio.play();  
-            setPlayingAudio(audio);  
+        if (audioElement.paused) {  
+            audioElement.play();  
+            setPlayingAudio(audioElement);  
         } else {  
-            audio.pause();  
+            audioElement.pause();  
             setPlayingAudio(null);  
         }  
     };  
 
     return (  
-        <section className="py-20 container mx-auto px-5">  
+        <section id="featured-beats" className="py-20 container mx-auto px-5">  
             <h2 className="text-4xl font-bold mb-10 text-center">🔥 Featured Beats</h2>  
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">  
                 {beats.map((beat) => (  
                     <div  
                         key={beat.id}  
-                        className="beat-card bg-black border border-red-500 p-5 rounded-lg text-center transform transition-transform duration-300"  
+                        className="beat-card bg-black border border-red-500 p-5 rounded-lg text-center hover:transform hover:-translate-y-2 hover:shadow-lg"  
                     >  
                         <h3 className="text-2xl font-bold mb-4">{beat.name}</h3>  
-                        <p className="mb-4">  
-                            Genre: {beat.genre} | BPM: {beat.bpm}  
-                        </p>  
+                        <p className="mb-4">Genre: {beat.genre} | BPM: {beat.bpm}</p>  
                         <audio id={`audio-${beat.id}`} src={beat.src}></audio>  
                         <button  
                             onClick={() =>  
@@ -49,6 +46,9 @@ const FeaturedBeats = () => {
                         >  
                             Play  
                         </button>  
+                        <small className="block mt-2 text-sm text-gray-400">  
+                            Current Time: 0:00  
+                        </small>  
                     </div>  
                 ))}  
             </div>  
