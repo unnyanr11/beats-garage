@@ -1,0 +1,96 @@
+<!DOCTYPE html>  
+<html lang="en">  
+
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">  
+    <title>Beats Garage</title>  
+
+    <!-- Meta Information -->  
+    <meta name="description" content="Discover high-quality professional beats for your music. Find and license beats from a variety of genres.">  
+    <meta name="author" content="Beats Garage">  
+    <meta name="keywords" content="beats, music, professional beats, beats licensing, buy beats, music production">  
+
+    <!-- Open Graph Tags -->  
+    <meta property="og:title" content="Beats Garage">  
+    <meta property="og:description" content="Discover high-quality professional beats for your music.">  
+    <meta property="og:image" content="https://example.com/og-image.png">  
+    <meta property="og:url" content="https://example.com">  
+    <meta property="og:type" content="website">  
+
+    <!-- Twitter Card Tags -->  
+    <meta name="twitter:card" content="summary_large_image">  
+    <meta name="twitter:title" content="Beats Garage">  
+    <meta name="twitter:description" content="Discover high-quality professional beats for your music.">  
+    <meta name="twitter:image" content="https://example.com/twitter-image.png">  
+
+    <!-- Favicon -->  
+    <link rel="icon" type="image/png" href="./favicon.ico">  
+
+    <!-- Tailwind CSS -->  
+    <script src="https://cdn.tailwindcss.com"></script>  
+
+    <!-- Tailwind Configuration -->  
+    <script>  
+        tailwind.config = {  
+            theme: {  
+                extend: {  
+                    colors: {  
+                        customRed: '#FF0000',  
+                        customBlack: '#000000',  
+                        customWhite: '#FFFFFF',  
+                    },  
+                    fontFamily: {  
+                        sans: ['Inter', 'sans-serif'],  
+                    },  
+                },  
+            },  
+        };  
+    </script>  
+
+    <!-- Google Fonts -->  
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">  
+
+    <style>  
+        body {  
+            background-color: black;  
+        }  
+    </style>  
+</head>  
+
+<body class="bg-black text-white font-sans antialiased">  
+    <!-- Page Content -->  
+    <div class="min-h-screen flex flex-col">  
+    
+
+        <!-- Main Content -->  
+        <main id="root" class="flex-grow"></main>  
+
+        <!-- Footer -->  
+        <footer class="text-center text-gray-500 text-sm mt-12">  
+            © 2025 Beats Garage. All rights reserved.  
+        </footer>  
+    </div>  
+
+    <!-- Script -->  
+    <script>  
+        document.getElementById('filter-form').addEventListener('submit', function (e) {  
+            e.preventDefault();  
+    
+            const formData = new FormData(this);  
+    
+            // Build query parameters. Default value = "all".  
+            const params = new URLSearchParams({  
+                bpm: formData.get('bpm') || 'all',  
+                genre: formData.get('genre') || 'all',  
+                mood: formData.get('mood') || 'all',  
+            });  
+    
+            // Redirect to beats.html with the query string  
+            window.location.href = `beats.html?${params.toString()}`;  
+        });  
+    </script>    
+</body>  
+
+</html>  
