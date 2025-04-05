@@ -1,191 +1,203 @@
+import React, { useState, useEffect, useMemo } from "react";  
+import PropTypes from "prop-types";  
+import { ShoppingCart } from "lucide-react";  
+import { useNavigate } from "react-router-dom";  
+import Popup from "../pages/Popup"; // Use the reusable Popup component  
 
-import React, { useState, useEffect } from "react";
-import PropTypes from "prop-types";
-import { ShoppingCart } from "lucide-react"; // Play/Pause icons removed as text is used now
-import { useNavigate } from "react-router-dom";
+// Utility functions for cart management  
+const getUniqueCartItems = () => {  
+    const storedCart = localStorage.getItem("cartItems");  
+    const parsedCart = storedCart ? JSON.parse(storedCart) : [];  
+    // Remove duplicates  
+    return parsedCart.reduce((acc, curr) => {  
+        if (!acc.some((item) => item.id === curr.id)) acc.push(curr);  
+        return acc;  
+    }, []);  
+};  
 
-const FeaturedBeats = ({ isLoggedIn }) => {
-    const beats = [
-        // Ensure the paths in 'src' are correct relative to your public folder
-        { id: 1, name: "Dark Vibes", genre: "trap", bpm: 120, mood: "dark", price: 25, src: "/audio/beat1.mp3" },
-        { id: 2, name: "Chill Flow", genre: "lofi", bpm: 90, mood: "chill", price: 20, src: "/audio/beat2.mp3" },
-        { id: 3, name: "Drill Dreams", genre: "drill", bpm: 140, mood: "energetic", price: 30, src: "/audio/beat3.mp3" },
-    ];
+const saveCartItems = (cartItems) => {  
+    const uniqueCart = cartItems.reduce((acc, curr) => {  
+        if (!acc.some((item) => item.id === curr.id)) acc.push(curr);  
+        return acc;  
+    }, []);  
+    localStorage.setItem("cartItems", JSON.stringify(uniqueCart));  
+};  
 
-    const [audioElements, setAudioElements] = useState({});
-    const [playingAudioId, setPlayingAudioId] = useState(null);
-    const [showPopup, setShowPopup] = useState(false);
-    const [selectedBeat, setSelectedBeat] = useState(null);
-    const navigate = useNavigate();
+const FeaturedBeats = ({ isLoggedIn }) => {  
+    // Declare static beats array using useMemo to avoid re-instantiating every render  
+    const beats = useMemo(  
+        () => [  
+            { id: 1, name: "Dark Vibes", genre: "trap", bpm: 120, mood: "dark", price: 25, src: "/audio/beat1.mp3" },  
+            { id: 2, name: "Chill Flow", genre: "lofi", bpm: 90, mood: "chill", price: 20, src: "/audio/beat2.mp3" },  
+            { id: 3, name: "Drill Dreams", genre: "drill", bpm: 140, mood: "energetic", price: 30, src: "/audio/beat3.mp3" },  
+        ],  
+        []  
+    );  
 
-    useEffect(() => {
-        const elements = {};
-        beats.forEach(beat => {
-            const audio = new Audio(beat.src);
-            audio.preload = 'metadata';
-            const handleEnd = () => setPlayingAudioId(null);
-            audio.addEventListener('ended', handleEnd);
-            const handleError = (e) => console.error(`Error loading audio ${beat.id}:`, e);
-            audio.addEventListener('error', handleError);
-            elements[beat.id] = { audio, handleEnd, handleError };
-        });
-        setAudioElements(elements);
+    const [audioElements, setAudioElements] = useState({});  
+    const [playingAudioId, setPlayingAudioId] = useState(null);  
+    const [showPopup, setShowPopup] = useState(false);  
+    const [popupMessage, setPopupMessage] = useState("");  
+    const [popupButtons, setPopupButtons] = useState([]);  
+    const navigate = useNavigate();  
 
-        return () => {
-            Object.values(elements).forEach(({ audio, handleEnd, handleError }) => {
-                 if (audio) {
-                     audio.removeEventListener('ended', handleEnd);
-                     audio.removeEventListener('error', handleError);
-                     audio.pause();
-                     audio.src = '';
-                 }
-            });
-        };
-    }, []);
+    // Initialize audio elements for each beat  
+    useEffect(() => {  
+        const elements = {};  
+        beats.forEach((beat) => {  
+            const audio = new Audio(beat.src);  
+            audio.preload = "metadata";  
+            elements[beat.id] = audio;  
+        });  
+        setAudioElements(elements);  
 
-    const togglePlayPause = (beatId) => {
-        const currentAudioData = audioElements[beatId];
-        if (!currentAudioData || !currentAudioData.audio) return;
+        // Cleanup audio elements on unmount  
+        return () => {  
+            Object.values(elements).forEach((audio) => {  
+                if (audio) {  
+                    audio.pause();  
+                    audio.removeAttribute("src");  
+                }  
+            });  
+        };  
+    }, [beats]);  
 
-        const currentAudio = currentAudioData.audio;
+    const togglePlayPause = (beatId) => {  
+        const currentAudio = audioElements[beatId];  
+        if (!currentAudio) return;  
 
-        if (playingAudioId && playingAudioId !== beatId) {
-            const otherAudioData = audioElements[playingAudioId];
-            if (otherAudioData && otherAudioData.audio) {
-                otherAudioData.audio.pause();
-            }
-        }
+        // Pause currently playing audio if a different audio is playing  
+        if (playingAudioId && playingAudioId !== beatId) {  
+            const previousAudio = audioElements[playingAudioId];  
+            previousAudio.pause();  
+        }  
 
-        if (playingAudioId === beatId) {
-            currentAudio.pause();
-            setPlayingAudioId(null);
-        } else {
-            currentAudio.play().then(() => {
-                setPlayingAudioId(beatId);
-            }).catch(error => {
-                console.error("Audio play failed for beat ID", beatId, ":", error);
-                setPlayingAudioId(null);
-            });
-        }
-    };
+        // Toggle play/pause for the selected beat  
+        if (playingAudioId === beatId) {  
+            currentAudio.pause();  
+            setPlayingAudioId(null);  
+        } else {  
+            currentAudio  
+                .play()  
+                .then(() => setPlayingAudioId(beatId))  
+                .catch((err) => console.error(`Error playing audio: ${err}`));  
+        }  
+    };  
 
+    const handleBuy = (beat) => {  
+        const cart = getUniqueCartItems();  
+        const beatForCart = { ...beat, title: beat.name }; // Map `name` to `title`  
 
-    const handleBuy = (beat) => {
-        if (isLoggedIn) {
-            const cart = JSON.parse(localStorage.getItem("cartItems")) || [];
-            const isAlreadyInCart = cart.some((item) => item.id === beat.id);
+        if (isLoggedIn) {  
+            const isAlreadyInCart = cart.some((item) => item.id === beat.id);  
 
-            if (isAlreadyInCart) {
-                alert(`${beat.name} is already in your cart!`);
-            } else {
-                localStorage.setItem("cartItems", JSON.stringify([...cart, beat]));
-                alert(`${beat.name} added to your cart!`);
-            }
-        } else {
-            if (playingAudioId) {
-                 const audioToPauseData = audioElements[playingAudioId];
-                 if (audioToPauseData && audioToPauseData.audio) {
-                    audioToPauseData.audio.pause();
-                    setPlayingAudioId(null);
-                 }
-            }
-            setSelectedBeat(beat);
-            setShowPopup(true);
-        }
-    };
+            if (isAlreadyInCart) {  
+                // Show popup for "Already in Cart"  
+                showPopupWithMessage("Beat is already in your cart.", [  
+                    {  
+                        label: "Close",  
+                        onClick: closePopup,  
+                        className: "bg-blue-500 hover:bg-blue-600",  
+                    },  
+                ]);  
+            } else {  
+                // Add to cart and show confirmation popup  
+                const updatedCart = [...cart, beatForCart];  
+                saveCartItems(updatedCart);  
+                showPopupWithMessage("Beat added to your cart!", [  
+                    {  
+                        label: "Close",  
+                        onClick: closePopup,  
+                        className: "bg-blue-500 hover:bg-blue-600",  
+                    },  
+                ]);  
+            }  
+        } else {  
+            // Show login/signup popup if not logged in  
+            showPopupWithMessage("Please log in or sign up to purchase.", [  
+                {  
+                    label: "Log In",  
+                    onClick: () => redirectTo("/login"),  
+                    className: "bg-blue-500 hover:bg-blue-600",  
+                },  
+                {  
+                    label: "Sign Up",  
+                    onClick: () => redirectTo("/signup"),  
+                    className: "bg-green-500 hover:bg-green-600",  
+                },  
+            ]);  
+        }  
+    };  
 
-    const closePopup = () => {
-        setShowPopup(false);
-        setSelectedBeat(null);
-    };
+    const showPopupWithMessage = (message, buttons) => {  
+        setPopupMessage(message);  
+        setPopupButtons(buttons || []);  
+        setShowPopup(true);  
+    };  
 
-    const redirectTo = (path) => {
-        navigate(path, { replace: true });
-    };
+    const closePopup = () => {  
+        setShowPopup(false);  
+    };  
 
-    return (
-        <section id="featured-beats" className="py-20 container mx-auto px-5 relative">
-            <h2 className="text-4xl font-bold mb-10 text-center text-white">Featured Beats</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-                {beats.map((beat) => (
-                    <div
-                        key={beat.id}
-                        className="bg-gray-800 border border-gray-700 p-6 rounded-lg text-center shadow-md hover:shadow-lg transition-transform transform hover:-translate-y-1 flex flex-col justify-between"
-                    >
-                       <div className="flex-grow">
-                           <h3 className="text-xl font-bold text-white mb-3">{beat.name}</h3>
-                           <p className="text-gray-400 mb-3 text-sm">
-                               {beat.genre} | {beat.bpm} BPM | {beat.mood}
-                           </p>
-                            <p className="text-lg font-semibold text-green-400 mb-4">
-                                ${beat.price}
-                            </p>
-                       </div>
+    const redirectTo = (path) => {  
+        navigate(path);  
+    };  
 
-                        {/* --- BUTTON STYLING UPDATED HERE --- */}
-                        <div className="flex justify-center gap-4 mt-4">
-                             {/* Play/Pause Button */}
-                             <button
-                                className={`px-4 py-2 w-24 text-white font-bold rounded-lg transition-colors duration-200 ease-in-out ${playingAudioId === beat.id ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'}`}
-                                onClick={() => togglePlayPause(beat.id)}
-                                aria-label={playingAudioId === beat.id ? `Pause ${beat.name}` : `Play ${beat.name}`}
-                            >
-                                {playingAudioId === beat.id ? "Pause" : "Play"} {/* Display text */}
-                            </button>
+    return (  
+        <section id="featured-beats" className="py-20 container mx-auto px-5">  
+            <h2 className="text-4xl font-bold mb-10 text-center text-white">Featured Beats</h2>  
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">  
+                {beats.map((beat) => (  
+                    <div  
+                        key={beat.id}  
+                        className="bg-gray-800 border border-gray-700 p-6 rounded-lg text-center shadow-md hover:shadow-lg transition-transform transform hover:-translate-y-1 flex flex-col justify-between"  
+                    >  
+                        <div>  
+                            <h2 className="text-xl font-bold text-white mb-3">{beat.name}</h2>  
+                            <p className="text-sm text-gray-300">  
+                                Genre: {beat.genre} | BPM: {beat.bpm} | Mood: {beat.mood}  
+                            </p>  
+                            <p className="text-md text-green-400 font-bold">${beat.price}</p>  
+                        </div>  
 
-                            {/* Buy Button */}
-                            <button
-                                className="px-4 py-2 w-24 bg-green-500 text-white font-bold flex items-center justify-center gap-2 rounded-lg hover:bg-green-600 transition-colors duration-200 ease-in-out"
-                                onClick={() => handleBuy(beat)}
-                                aria-label={`Buy ${beat.name}`}
-                            >
-                                <ShoppingCart size={16} />
-                                Buy
-                            </button>
-                        </div>
-                         {/* --- END OF BUTTON STYLING UPDATE --- */}
-                    </div>
-                ))}
-            </div>
+                        <div className="flex justify-center gap-4 mt-4">  
+                            <button  
+                                className={`px-4 py-2 text-white font-bold rounded-lg transition-colors ${  
+                                    playingAudioId === beat.id  
+                                        ? "bg-red-600 hover:bg-red-700"  
+                                        : "bg-red-500 hover:bg-red-600"  
+                                }`}  
+                                onClick={() => togglePlayPause(beat.id)}  
+                            >  
+                                {playingAudioId === beat.id ? "Pause" : "Play"}  
+                            </button>  
 
-            {/* Login/Signup Popup */}
-            {showPopup && (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4">
-                    <div className="bg-gray-900 border border-gray-700 p-6 rounded-lg shadow-2xl text-center max-w-md w-full mx-auto">
-                        <h3 className="text-xl font-semibold text-white mb-4">
-                            Log In or Sign Up to Buy
-                        </h3>
-                        <p className="text-gray-300 mb-6">You need an account to purchase &quot;{selectedBeat?.name}&quot;.</p>
-                        <div className="flex flex-col sm:flex-row justify-center gap-4">
-                            <button
-                                onClick={() => redirectTo("/login")}
-                                className="px-6 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors duration-200"
-                            >
-                                Log In
-                            </button>
-                            <button
-                                onClick={() => redirectTo("/signup")}
-                                className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors duration-200"
-                            >
-                                Sign Up
-                            </button>
-                        </div>
-                        <button
-                            className="mt-6 text-sm text-gray-400 hover:text-gray-200 hover:underline"
-                            onClick={closePopup}
-                            aria-label="Close login prompt"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            )}
-        </section>
-    );
-};
+                            <button  
+                                className="px-4 py-2 bg-green-500 text-white font-bold flex items-center gap-2 rounded-lg hover:bg-green-600 transition"  
+                                onClick={() => handleBuy(beat)}  
+                                aria-label={`Buy ${beat.name}`}  
+                            >  
+                                <ShoppingCart size={16} />  
+                                Buy  
+                            </button>  
+                        </div>  
+                    </div>  
+                ))}  
+            </div>  
 
-FeaturedBeats.propTypes = {
-    isLoggedIn: PropTypes.bool.isRequired,
-};
+            {/* Popup Section */}  
+            {showPopup && (  
+                <Popup  
+                    message={popupMessage}  
+                    buttons={popupButtons}  
+                />  
+            )}  
+        </section>  
+    );  
+};  
 
-export default FeaturedBeats;
+FeaturedBeats.propTypes = {  
+    isLoggedIn: PropTypes.bool.isRequired,  
+};  
+
+export default FeaturedBeats;  
