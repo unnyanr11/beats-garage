@@ -4,7 +4,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { ShoppingCart } from "lucide-react";  
 import Popup from "../pages/Popup"; // Import reusable Popup component  
 
-// Utilities for Cart Management  
 const getCartItems = () => {  
     const storedCart = localStorage.getItem("cartItems");  
     return storedCart ? JSON.parse(storedCart) : [];  
@@ -58,7 +57,6 @@ const BeatsPage = ({ isLoggedIn }) => {
                     (filters.bpm === "91-120" && beat.bpm >= 91 && beat.bpm <= 120) ||  
                     (filters.bpm === "121-150" && beat.bpm >= 121 && beat.bpm <= 150) ||  
                     (filters.bpm === "151+" && beat.bpm > 150);  
-
                 const genreMatch = filters.genre === "all" || filters.genre === beat.genre;  
                 const moodMatch = filters.mood === "all" || filters.mood === beat.mood;  
 
@@ -225,6 +223,16 @@ const BeatsPage = ({ isLoggedIn }) => {
                     )}  
                 </div>  
             </section>  
+
+            {/* Back to Home Button */}  
+            <div className="flex justify-center mt-8">  
+                <button  
+                    onClick={() => navigate("/")}  
+                    className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg"  
+                >  
+                    Back to Home  
+                </button>  
+            </div>  
 
             {/* Popup Component */}  
             {showPopup && (  
