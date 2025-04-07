@@ -1,257 +1,356 @@
-import React, { useState, useEffect } from "react";  
+import React, { useState, useEffect, useRef } from "react";  
 import PropTypes from "prop-types";  
-import { useNavigate, useSearchParams } from "react-router-dom";  
+import { useNavigate } from "react-router-dom";  
 import { ShoppingCart } from "lucide-react";  
-import Popup from "../pages/Popup"; // Import reusable Popup component  
+import { db } from "../firebase";  
+import { collection, getDocs } from "firebase/firestore";  
+import Popup from "../pages/Popup";  
 
-const getCartItems = () => {  
-    const storedCart = localStorage.getItem("cartItems");  
-    return storedCart ? JSON.parse(storedCart) : [];  
-};  
+// Constants  
+const PLACEHOLDER_IMAGE = "/api/placeholder/400/400";  
+
+// Utility Functions for LocalStorage  
+const getCartItems = () => JSON.parse(localStorage.getItem("cartItems") || "[]");  
 
 const saveCartItems = (items) => {  
-    const uniqueCart = items.reduce((acc, curr) => {  
-        if (!acc.some((item) => item.title === curr.title)) acc.push(curr);  
-        return acc;  
-    }, []);  
-    localStorage.setItem("cartItems", JSON.stringify(uniqueCart));  
-    return uniqueCart;  
+  const uniqueCart = items.reduce((acc, curr) => {  
+    if (!acc.some((item) => item.id === curr.id)) acc.push(curr);  
+    return acc;  
+  }, []);  
+  localStorage.setItem("cartItems", JSON.stringify(uniqueCart));  
 };  
 
-const isBeatInCart = (beat) => {  
-    const cart = getCartItems();  
-    return cart.some((item) => item.title === beat.title);  
-};  
+const isBeatInCart = (beat) => getCartItems().some((item) => item.id === beat.id);  
 
 // BeatsPage Component  
 const BeatsPage = ({ isLoggedIn }) => {  
-    const beats = [  
-        { title: "Dark Vibes", genre: "trap", bpm: 120, mood: "dark", price: 25, src: "/audio/beat1.mp3" },  
-        { title: "Chill Flow", genre: "lofi", bpm: 90, mood: "chill", price: 20, src: "/audio/beat2.mp3" },  
-        { title: "Drill Dreams", genre: "drill", bpm: 140, mood: "energetic", price: 30, src: "/audio/beat3.mp3" },  
-        { title: "Upbeat Groove", genre: "edm", bpm: 130, mood: "upbeat", price: 15, src: "/audio/beat4.mp3" },  
-        { title: "Relaxed Beats", genre: "lofi", bpm: 85, mood: "chill", price: 12, src: "/audio/beat5.mp3" },  
-    ];  
+  const [beats, setBeats] = useState([]); // Holds all beats  
+  const [filteredBeats, setFilteredBeats] = useState([]); // Holds filtered beats  
+  const [filters, setFilters] = useState({ bpm: "all", genre: "all", mood: "all" });  
+  const [showPopup, setShowPopup] = useState(false); // Popup state  
+  const [popupMessage, setPopupMessage] = useState("");  
+  const [popupButtons, setPopupButtons] = useState([]);  
+  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null); // Tracks currently playing beat  
 
-    const [searchParams, setSearchParams] = useSearchParams();  
-    const [filters, setFilters] = useState({ bpm: "all", genre: "all", mood: "all" });  
-    const [filteredBeats, setFilteredBeats] = useState(beats);  
-    const [showPopup, setShowPopup] = useState(false);  
-    const [popupMessage, setPopupMessage] = useState("");  
-    const [popupButtons, setPopupButtons] = useState([]);  
-    const navigate = useNavigate();  
+  const navigate = useNavigate();  
 
-    useEffect(() => {  
-        const bpm = searchParams.get("bpm") || "all";  
-        const genre = searchParams.get("genre") || "all";  
-        const mood = searchParams.get("mood") || "all";  
-        setFilters({ bpm, genre, mood });  
-    }, [searchParams]);  
+  // Fetch beats data from Firestore  
+  useEffect(() => {  
+    const fetchBeats = async () => {  
+      try {  
+        const beatsCollection = collection(db, "beats");  
+        const snapshot = await getDocs(beatsCollection);  
+        const beatsData = snapshot.docs.map((doc) => {  
+          const data = { id: doc.id, ...doc.data() };  
+          // Ensure imageURL fallback during data fetch  
+          return {  
+            ...data,  
+            imageUrl: data.imageUrl || PLACEHOLDER_IMAGE,  
+          };  
+        });  
 
-    useEffect(() => {  
-        const filterBeats = () => {  
-            return beats.filter((beat) => {  
-                const bpmMatch =  
-                    filters.bpm === "all" ||  
-                    (filters.bpm === "60-90" && beat.bpm >= 60 && beat.bpm <= 90) ||  
-                    (filters.bpm === "91-120" && beat.bpm >= 91 && beat.bpm <= 120) ||  
-                    (filters.bpm === "121-150" && beat.bpm >= 121 && beat.bpm <= 150) ||  
-                    (filters.bpm === "151+" && beat.bpm > 150);  
-                const genreMatch = filters.genre === "all" || filters.genre === beat.genre;  
-                const moodMatch = filters.mood === "all" || filters.mood === beat.mood;  
-
-                return bpmMatch && genreMatch && moodMatch;  
-            });  
-        };  
-
-        setFilteredBeats(filterBeats());  
-    }, [filters]);  
-
-    const handleFilterChange = (e) => {  
-        const { name, value } = e.target;  
-        const newFilters = { ...filters, [name]: value };  
-        setFilters(newFilters);  
-        setSearchParams(newFilters);  
+        console.log("Fetched beats data:", beatsData); // Debugging fetched data  
+        setBeats(beatsData);  
+        setFilteredBeats(beatsData); // Initialize filtered beats  
+      } catch (error) {  
+        console.error("Error fetching beats from Firestore:", error);  
+        alert("Failed to fetch beats. Please try again later.");  
+      }  
     };  
 
-    const handleAddToCart = (beat) => {  
-        if (isLoggedIn) {  
-            if (isBeatInCart(beat)) {  
-                showPopupWithMessage("Beat is already in your cart.", [  
-                    {  
-                        label: "Close",  
-                        className: "bg-blue-500 hover:bg-blue-600",  
-                        onClick: closePopup,  
-                    },  
-                ]);  
-            } else {  
-                saveCartItems([...getCartItems(), beat]);  
-                showPopupWithMessage("Beat added to your cart!", [  
-                    {  
-                        label: "Close",  
-                        className: "bg-blue-500 hover:bg-blue-600",  
-                        onClick: closePopup,  
-                    },  
-                ]);  
-            }  
-        } else {  
-            showPopupWithMessage(`Please log in or sign up to buy "${beat.title}".`, [  
-                {  
-                    label: "Log In",  
-                    className: "bg-blue-500 hover:bg-blue-600",  
-                    onClick: () => redirectTo("/login"),  
-                },  
-                {  
-                    label: "Sign Up",  
-                    className: "bg-green-500 hover:bg-green-600",  
-                    onClick: () => redirectTo("/signup"),  
-                },  
-            ]);  
-        }  
-    };  
+    fetchBeats();  
+  }, []);  
 
-    const showPopupWithMessage = (message, buttons) => {  
-        setPopupMessage(message);  
-        setPopupButtons(buttons);  
-        setShowPopup(true);  
-    };  
+  // Update filtered beats whenever filters or beats change  
+  useEffect(() => {  
+    const applyFilters = () =>  
+      beats.filter((beat) => {  
+        const bpmMatch =  
+          filters.bpm === "all" ||  
+          (filters.bpm === "60-90" && beat.bpm >= 60 && beat.bpm <= 90) ||  
+          (filters.bpm === "91-120" && beat.bpm >= 91 && beat.bpm <= 120) ||  
+          (filters.bpm === "121-150" && beat.bpm >= 121 && beat.bpm <= 150) ||  
+          (filters.bpm === "151+" && beat.bpm > 150);  
 
-    const closePopup = () => {  
-        setShowPopup(false);  
-    };  
+        const genreMatch = filters.genre === "all" || filters.genre === beat.genre;  
+        const moodMatch = filters.mood === "all" || filters.mood === beat.mood;  
 
-    const redirectTo = (path) => {  
-        navigate(path, { replace: true });  
-    };  
+        return bpmMatch && genreMatch && moodMatch;  
+      });  
 
-    return (  
-        <div className="bg-black text-white min-h-screen p-8 font-sans">  
-            <header className="p-4 text-center">  
-                <h1 className="text-4xl font-bold">Explore Our Beats</h1>  
-                <p className="text-gray-400 mt-2">The best beats for your tracks</p>  
-            </header>  
+    setFilteredBeats(applyFilters());  
+  }, [filters, beats]);  
 
-            {/* Filters Section */}  
-            <section className="bg-gray-800 p-6 shadow-lg rounded-lg mb-8">  
-                <form className="flex flex-col md:flex-row items-center justify-center gap-4">  
-                    {/* BPM Filter */}  
-                    <div className="flex flex-col">  
-                        <label htmlFor="bpm" className="text-sm text-gray-300 mb-1">BPM</label>  
-                        <select  
-                            id="bpm"  
-                            name="bpm"  
-                            value={filters.bpm}  
-                            onChange={handleFilterChange}  
-                            className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"  
-                        >  
-                            <option value="all">All BPMs</option>  
-                            <option value="60-90">60-90</option>  
-                            <option value="91-120">91-120</option>  
-                            <option value="121-150">121-150</option>  
-                            <option value="151+">151+</option>  
-                        </select>  
-                    </div>  
+  const handleFilterChange = (e) => {  
+    const { name, value } = e.target;  
+    setFilters({ ...filters, [name]: value });  
+  };  
 
-                    {/* Genre Filter */}  
-                    <div className="flex flex-col">  
-                        <label htmlFor="genre" className="text-sm text-gray-300 mb-1">Genre</label>  
-                        <select  
-                            id="genre"  
-                            name="genre"  
-                            value={filters.genre}  
-                            onChange={handleFilterChange}  
-                            className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"  
-                        >  
-                            <option value="all">All Genres</option>  
-                            <option value="trap">Trap</option>  
-                            <option value="lofi">Lo-Fi</option>  
-                            <option value="drill">Drill</option>  
-                            <option value="edm">EDM</option>  
-                        </select>  
-                    </div>  
+  const handleAddToCart = (beat) => {  
+    if (isLoggedIn) {  
+      if (isBeatInCart(beat)) {  
+        showPopupWithMessage(`"${beat.name}" is already in your cart.`, [  
+          { label: "Close", className: "bg-blue-500 hover:bg-blue-600", onClick: closePopup },  
+        ]);  
+      } else {  
+        saveCartItems([...getCartItems(), beat]);  
+        showPopupWithMessage(`"${beat.name}" added to your cart!`, [  
+          { label: "Close", className: "bg-green-500 hover:bg-green-600", onClick: closePopup },  
+        ]);  
+      }  
+    } else {  
+      showPopupWithMessage(`Log in or sign up to buy "${beat.name}".`, [  
+        {  
+          label: "Log In",  
+          className: "bg-blue-500 hover:bg-blue-600",  
+          onClick: () => redirectTo("/login"),  
+        },  
+        {  
+          label: "Sign Up",  
+          className: "bg-green-500 hover:bg-green-600",  
+          onClick: () => redirectTo("/signup"),  
+        },  
+      ]);  
+    }  
+  };  
 
-                    {/* Mood Filter */}  
-                    <div className="flex flex-col">  
-                        <label htmlFor="mood" className="text-sm text-gray-300 mb-1">Mood</label>  
-                        <select  
-                            id="mood"  
-                            name="mood"  
-                            value={filters.mood}  
-                            onChange={handleFilterChange}  
-                            className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"  
-                        >  
-                            <option value="all">All Moods</option>  
-                            <option value="dark">Dark</option>  
-                            <option value="chill">Chill</option>  
-                            <option value="energetic">Energetic</option>  
-                            <option value="upbeat">Upbeat</option>  
-                        </select>  
-                    </div>  
-                </form>  
-            </section>  
+  const showPopupWithMessage = (message, buttons) => {  
+    setPopupMessage(message);  
+    setPopupButtons(buttons);  
+    setShowPopup(true);  
+  };  
 
-            {/* Beats Section */}  
-            <section className="flex flex-col items-center mt-8 space-y-6">  
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-10/12">  
-                    {filteredBeats.length > 0 ? (  
-                        filteredBeats.map((beat, index) => (  
-                            <div key={index} className="p-4 bg-gray-800 text-center rounded-lg shadow-lg">  
-                                <h2 className="font-bold text-lg mb-2">{beat.title}</h2>  
-                                <p className="text-sm text-gray-300">  
-                                    Genre: {beat.genre} | BPM: {beat.bpm} | Mood: {beat.mood}  
-                                </p>  
-                                <p className="text-md text-green-400 font-bold">${beat.price}</p>  
-                                <div className="mt-4 flex justify-center gap-2">  
-                                    <button  
-                                        onClick={() => alert(`Playing ${beat.title}`)}  
-                                        className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg"  
-                                    >  
-                                        Play  
-                                    </button>  
-                                    <button  
-                                        onClick={() => handleAddToCart(beat)}  
-                                        className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white font-bold rounded-lg flex items-center gap-2"  
-                                    >  
-                                        <ShoppingCart size={20} />  
-                                        Buy  
-                                    </button>  
-                                </div>  
-                            </div>  
-                        ))  
-                    ) : (  
-                        <p className="text-gray-400">No beats match the selected filters.</p>  
-                    )}  
-                </div>  
-            </section>  
+  const closePopup = () => setShowPopup(false);  
 
-            {/* Back to Home Button */}  
-            <div className="flex justify-center mt-8">  
-                <button  
-                    onClick={() => navigate("/")}  
-                    className="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-lg"  
-                >  
-                    Back to Home  
-                </button>  
-            </div>  
+  const redirectTo = (path) => navigate(path, { replace: true });  
 
-            {/* Popup Component */}  
-            {showPopup && (  
-                <Popup  
-                    message={popupMessage}  
-                    buttons={popupButtons}  
-                />  
-            )}  
+  return (  
+    <div className="bg-black text-white min-h-screen p-8 font-sans">  
+      <header className="p-4 text-center">  
+        <h1 className="text-4xl font-bold">Explore Our Beats</h1>  
+        <p className="text-gray-400 mt-2">The best beats for your tracks</p>  
+      </header>  
 
-            <footer className="text-center text-xs text-gray-600 mt-12">  
-                © 2025 Beats Garage. All rights reserved.  
-            </footer>  
-        </div>  
-    );  
+      {/* Filters Section */}  
+      <section className="bg-gray-800 p-6 shadow-lg rounded-lg mb-8">  
+        <form className="flex flex-col md:flex-row items-center justify-center gap-4">  
+          <FilterSelect  
+            name="bpm"  
+            label="BPM"  
+            value={filters.bpm}  
+            handleChange={handleFilterChange}  
+            options={["all", "60-90", "91-120", "121-150", "151+"]}  
+          />  
+          <FilterSelect  
+            name="genre"  
+            label="Genre"  
+            value={filters.genre}  
+            handleChange={handleFilterChange}  
+            options={["all", "trap", "lofi", "drill", "edm"]}  
+          />  
+          <FilterSelect  
+            name="mood"  
+            label="Mood"  
+            value={filters.mood}  
+            handleChange={handleFilterChange}  
+            options={["all", "dark", "chill", "energetic", "upbeat"]}  
+          />  
+        </form>  
+      </section>  
+
+      {/* Beats Section */}  
+      <section>  
+        {filteredBeats.length > 0 ? (  
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">  
+            {filteredBeats.map((beat) => (  
+              <AudioPlayer  
+                key={beat.id}  
+                beat={beat}  
+                isPlaying={currentlyPlayingId === beat.id}  
+                onPlayPause={(id) =>  
+                  setCurrentlyPlayingId(currentlyPlayingId === id ? null : id)  
+                }  
+                handleAddToCart={handleAddToCart}  
+              />  
+            ))}  
+          </div>  
+        ) : (  
+          <p className="text-gray-400 text-center">No beats match the selected filters.</p>  
+        )}  
+      </section>  
+
+      {/* Popup */}  
+      {showPopup && <Popup message={popupMessage} buttons={popupButtons} />}  
+
+      <footer className="text-center text-xs text-gray-600 mt-12">  
+        © 2025 Beats Garage. All rights reserved.  
+      </footer>  
+    </div>  
+  );  
 };  
 
-// PropTypes validation  
+// FilterSelect Component  
+const FilterSelect = ({ name, label, value, handleChange, options }) => (  
+  <div className="flex flex-col">  
+    <label htmlFor={name} className="text-sm text-gray-300 mb-1">  
+      {label}  
+    </label>  
+    <select  
+      id={name}  
+      name={name}  
+      value={value}  
+      onChange={handleChange}  
+      className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"  
+    >  
+      {options.map((option) => (  
+        <option key={option} value={option}>  
+          {option === "all" ? `All ${label}s` : option}  
+        </option>  
+      ))}  
+    </select>  
+  </div>  
+);  
+
+// AudioPlayer Component (Handles Images)  
+const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {  
+  const audioRef = useRef(null);  
+  const [time, setTime] = useState({ current: "0:00", total: "0:00" });  
+  const [progress, setProgress] = useState(0);  
+
+  const formatTime = (secs) => {  
+    if (!secs || isNaN(secs)) return "0:00";  
+    const minutes = Math.floor(secs / 60);  
+    const seconds = Math.floor(secs % 60).toString().padStart(2, "0");  
+    return `${minutes}:${seconds}`;  
+  };  
+
+  useEffect(() => {  
+    const audioElement = audioRef.current;  
+
+    const handleLoadedMetadata = () => {  
+      if (audioElement) {  
+        setTime({ ...time, total: formatTime(audioElement.duration || 0) });  
+      }  
+    };  
+
+    const handleTimeUpdate = () => {  
+      if (audioElement) {  
+        setTime({ ...time, current: formatTime(audioElement.currentTime || 0) });  
+        setProgress((audioElement.currentTime / audioElement.duration) * 100 || 0);  
+      }  
+    };  
+
+    if (audioElement) {  
+      audioElement.addEventListener("loadedmetadata", handleLoadedMetadata);  
+      audioElement.addEventListener("timeupdate", handleTimeUpdate);  
+    }  
+
+    return () => {  
+      if (audioElement) {  
+        audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);  
+        audioElement.removeEventListener("timeupdate", handleTimeUpdate);  
+      }  
+    };  
+  }, [beat.audioUrl]);  
+
+  const handlePlayPauseClick = () => {  
+    if (audioRef.current) {  
+      if (isPlaying) {  
+        audioRef.current.pause();  
+      } else {  
+        audioRef.current.play();  
+      }  
+      onPlayPause(beat.id);  
+    }  
+  };  
+
+  const handleSliderChange = (e) => {  
+    if (audioRef.current) {  
+      const newTime = (e.target.value / 100) * audioRef.current.duration;  
+      audioRef.current.currentTime = newTime;  
+      setProgress(e.target.value);  
+    }  
+  };  
+
+  return (  
+    <div className="p-4 bg-gray-800 rounded-lg shadow-lg flex items-center gap-4">  
+      <div className="flex-1">  
+        <h2 className="font-bold text-lg mb-2">{beat.name || "Untitled Beat"}</h2>  
+        <p className="text-gray-300">  
+          Genre: {beat.genre || "N/A"} | BPM: {beat.bpm || "N/A"} | Mood: {beat.mood || "N/A"}  
+        </p>  
+        <p className="text-green-400 font-bold">${beat.price?.toFixed(2) || "0.00"}</p>  
+        <div className="mt-4 flex flex-col items-start">  
+          <div className="flex items-center gap-4">  
+            <button  
+              onClick={handlePlayPauseClick}  
+              className={`px-4 py-2 font-bold text-white rounded-lg ${  
+                isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"  
+              }`}  
+            >  
+              {isPlaying ? "Pause" : "Play"}  
+            </button>  
+            <span className="text-gray-300 text-sm">  
+              {time.current} / {time.total}  
+            </span>  
+            <button  
+              onClick={() => handleAddToCart(beat)}  
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white flex items-center gap-1 font-bold"  
+            >  
+              <ShoppingCart size={18} />  
+              Add to Cart  
+            </button>  
+          </div>  
+          <input  
+            type="range"  
+            min={0}  
+            max={100}  
+            value={progress}  
+            onChange={handleSliderChange}  
+            className="mt-4 w-full h-2 bg-gray-700 rounded-lg cursor-pointer"  
+            style={{ background: `linear-gradient(to right, #4caf50 ${progress}%, #555 ${progress}%)` }}  
+          />  
+        </div>  
+      </div>  
+      <div className="w-44 h-44">  
+        <img  
+          src={beat.imageUrl || PLACEHOLDER_IMAGE}  
+          alt={beat.name || "No Image"}  
+          className="w-full h-full object-cover "  
+          loading="lazy"  
+        />  
+      </div>  
+      <audio ref={audioRef} src={beat.audioUrl} preload="metadata"></audio>  
+    </div>  
+  );  
+};  
+
 BeatsPage.propTypes = {  
-    isLoggedIn: PropTypes.bool.isRequired,  
+  isLoggedIn: PropTypes.bool.isRequired,  
+};  
+
+AudioPlayer.propTypes = {  
+  beat: PropTypes.shape({  
+    id: PropTypes.string.isRequired,  
+    name: PropTypes.string,  
+    genre: PropTypes.string,  
+    bpm: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),  
+    mood: PropTypes.string,  
+    price: PropTypes.number,  
+    imageUrl: PropTypes.string,  
+    audioUrl: PropTypes.string.isRequired,  
+  }).isRequired,  
+  isPlaying: PropTypes.bool.isRequired,  
+  onPlayPause: PropTypes.func.isRequired,  
+  handleAddToCart: PropTypes.func.isRequired,  
+};  
+
+FilterSelect.propTypes = {  
+  name: PropTypes.string.isRequired,  
+  label: PropTypes.string.isRequired,  
+  value: PropTypes.string.isRequired,  
+  handleChange: PropTypes.func.isRequired,  
+  options: PropTypes.arrayOf(PropTypes.string).isRequired,  
 };  
 
 export default BeatsPage;  
