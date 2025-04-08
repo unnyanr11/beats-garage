@@ -24,6 +24,7 @@ const isBeatInCart = (beat) => getCartItems().some((item) => item.id === beat.id
 const FeaturedBeats = ({ isLoggedIn }) => {  
   const [beats, setBeats] = useState([]); // Tracks fetched beats  
   const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null); // Tracks actively playing beat  
+  const [playingAudioRef, setPlayingAudioRef] = useState(null); // Tracks the audioRef of the currently playing beat  
   const [showPopup, setShowPopup] = useState(false); // Show/hide popup state  
   const [popupMessage, setPopupMessage] = useState(""); // Popup text content  
   const [popupButtons, setPopupButtons] = useState([]); // Buttons in the popup  
@@ -90,13 +91,21 @@ const FeaturedBeats = ({ isLoggedIn }) => {
     <section id="featured-beats" className="py-20 container mx-auto px-5">  
       <h2 className="text-4xl font-bold mb-10 text-center text-white">Featured Beats</h2>  
       {beats.length > 0 ? (  
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">  
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 justify-items-center">  
           {beats.map((beat) => (  
             <AudioPlayer  
               key={beat.id}  
               beat={beat}  
               isPlaying={currentlyPlayingId === beat.id}  
-              onPlayPause={(id) => setCurrentlyPlayingId(currentlyPlayingId === id ? null : id)}  
+              onPlayPause={(id, audioRef) => {  
+                // Stop currently playing audio if it's not the same as the new one  
+                if (currentlyPlayingId !== null && currentlyPlayingId !== id && playingAudioRef) {  
+                  playingAudioRef.pause();  
+                  playingAudioRef.currentTime = 0; // Reset current time  
+                }  
+                setCurrentlyPlayingId(currentlyPlayingId === id ? null : id); // Toggle play/pause state  
+                setPlayingAudioRef(audioRef); // Set the new playing audio  
+              }}  
               onAddToCart={handleAddToCart}  
             />  
           ))}  
@@ -122,21 +131,37 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
     return `${minutes}:${secs}`;  
   };  
 
+  // Safely format the price  
+  const getFormattedPrice = (priceValue) => {  
+    const numPrice = parseFloat(priceValue); // Attempt to convert to number  
+    if (!isNaN(numPrice)) {  
+      return `$${numPrice.toFixed(2)}`; // Format if it's a valid number  
+    }  
+    return "$0.00"; // Default value if price is invalid or missing  
+  };  
+
   useEffect(() => {  
     const audio = audioRef.current;  
 
     const updateMetadata = () => {  
-      setTime((prev) => ({ ...prev, total: formatTime(audio.duration) }));  
+      if (audio) {  
+        setTime((prev) => ({ ...prev, total: formatTime(audio.duration || 0) }));  
+      }  
     };  
 
     const updateProgress = () => {  
-      setTime((prev) => ({ ...prev, current: formatTime(audio.currentTime) }));  
-      setProgress((audio.currentTime / audio.duration) * 100 || 0);  
+      if (audio) {  
+        setTime((prev) => ({ ...prev, current: formatTime(audio.currentTime || 0) }));  
+        setProgress(((audio.currentTime || 0) / (audio.duration || 1)) * 100);  
+      }  
     };  
 
     if (audio) {  
       audio.addEventListener("loadedmetadata", updateMetadata);  
       audio.addEventListener("timeupdate", updateProgress);  
+      if (audio.readyState >= 1) {  
+        updateMetadata();  
+      }  
     }  
 
     return () => {  
@@ -145,18 +170,21 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
         audio.removeEventListener("timeupdate", updateProgress);  
       }  
     };  
-  }, []);  
+  }, [beat.audioUrl]);  
 
   const togglePlayPause = () => {  
     if (audioRef.current) {  
-      if (isPlaying) audioRef.current.pause();  
-      else audioRef.current.play();  
-      onPlayPause(beat.id);  
+      onPlayPause(beat.id, audioRef.current); // Pass beat ID and current audioRef to parent  
+      if (isPlaying) {  
+        audioRef.current.pause();  
+      } else {  
+        audioRef.current.play();  
+      }  
     }  
   };  
 
   const handleSliderChange = (e) => {  
-    if (audioRef.current) {  
+    if (audioRef.current && audioRef.current.duration) {  
       const newTime = (e.target.value / 100) * audioRef.current.duration;  
       audioRef.current.currentTime = newTime;  
       setProgress(e.target.value);  
@@ -164,45 +192,54 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
   };  
 
   return (  
-    <div className="bg-gray-800 rounded-lg shadow-lg flex flex-col items-center p-4" style={{ width: "250px", height: "400px" }}>  
-      <div className="w-full h-48 mb-4">  
-        <img src={beat.imageUrl} alt={beat.name} className="w-full h-full object-cover rounded-t-lg" />  
-      </div>  
-      <div className="flex-1 w-full text-center">  
-        <h2 className="font-bold text-lg text-white">{beat.name}</h2>  
-        <p className="text-gray-300">Genre: {beat.genre} | BPM: {beat.bpm} | Mood: {beat.mood}</p>  
-        <p className="font-bold text-green-400 mt-2">${beat.price.toFixed(2)}</p>  
-        {/* Play/Pause Button */}  
-        <div className="flex items-center justify-center mt-4 gap-4">  
-          <button  
-            className={`px-4 py-2 font-bold text-white rounded-lg ${isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"}`}  
-            onClick={togglePlayPause}  
-          >  
-            {isPlaying ? "Pause" : "Play"}  
-          </button>  
-          <span className="text-sm text-gray-300">{time.current} / {time.total}</span>  
-        </div>  
-        {/* Slider */}  
-        <input  
-          type="range"  
-          min="0"  
-          max="100"  
-          value={progress}  
-          onChange={handleSliderChange}  
-          className="w-full h-1 mt-2 bg-gray-700 rounded cursor-pointer"  
-          style={{ background: `linear-gradient(to right, #4caf50 ${progress}%, #555 ${progress}%)` }}  
+    <div className="bg-gray-800 rounded-lg shadow-lg flex flex-col items-center p-4 w-full max-w-xs">  
+      <div className="w-full aspect-square mb-4 relative">  
+        <img  
+          src={beat.imageUrl || PLACEHOLDER_IMAGE}  
+          alt={beat.name || "Beat cover"}  
+          className="w-full h-full object-cover rounded-t-lg absolute inset-0"  
+          loading="lazy"  
         />  
-        {/* Add to Cart */}  
-        <button  
-          className="mt-4 w-full px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2"  
-          onClick={() => onAddToCart(beat)}  
-        >  
-          <ShoppingCart size={16} />  
-          Add to Cart  
-        </button>  
       </div>  
-      {/* Hidden Audio Element */}  
-      <audio ref={audioRef} src={beat.audioUrl} autoPlay={false}></audio>  
+      <div className="flex-1 w-full text-center flex flex-col justify-between">  
+        <div>  
+          <h2 className="font-bold text-lg text-white truncate">{beat.name || "Untitled Beat"}</h2>  
+          <p className="text-gray-300 text-sm truncate">  
+            Genre: {beat.genre || "N/A"} | BPM: {beat.bpm || "N/A"} | Mood: {beat.mood || "N/A"}  
+          </p>  
+          <p className="font-bold text-green-400 mt-1">{getFormattedPrice(beat.price)}</p>  
+        </div>  
+        <div className="mt-3">  
+          <div className="flex items-center justify-center gap-4">  
+            <button  
+              className={`px-4 py-2 font-bold text-white rounded-lg transition-colors duration-200 ${  
+                isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"  
+              }`}  
+              onClick={togglePlayPause}  
+            >  
+              {isPlaying ? "Pause" : "Play"}  
+            </button>  
+            <span className="text-sm text-gray-300">{time.current} / {time.total}</span>  
+          </div>  
+          <input  
+            type="range"  
+            min="0"  
+            max="100"  
+            value={progress}  
+            onChange={handleSliderChange}  
+            className="w-full h-1 mt-3 bg-gray-700 rounded cursor-pointer appearance-none"  
+            style={{ background: `linear-gradient(to right, #4caf50 ${progress}%, #555 ${progress}%)` }}  
+          />  
+          <button  
+            className="mt-3 w-full px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2 transition-colors duration-200"  
+            onClick={() => onAddToCart(beat)}  
+          >  
+            <ShoppingCart size={16} />  
+            Add to Cart  
+          </button>  
+        </div>  
+      </div>  
+      <audio ref={audioRef} src={beat.audioUrl} preload="metadata" key={beat.audioUrl}></audio>  
     </div>  
   );  
 };  
@@ -212,7 +249,16 @@ FeaturedBeats.propTypes = {
 };  
 
 AudioPlayer.propTypes = {  
-  beat: PropTypes.object.isRequired,  
+  beat: PropTypes.shape({  
+    id: PropTypes.string.isRequired,  
+    name: PropTypes.string,  
+    genre: PropTypes.string,  
+    bpm: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),  
+    mood: PropTypes.string,  
+    price: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),  
+    imageUrl: PropTypes.string,  
+    audioUrl: PropTypes.string, // Expect audioUrl  
+  }).isRequired,  
   isPlaying: PropTypes.bool.isRequired,  
   onPlayPause: PropTypes.func.isRequired,  
   onAddToCart: PropTypes.func.isRequired,  

@@ -27,23 +27,24 @@ const BeatsPage = ({ isLoggedIn }) => {
   const [beats, setBeats] = useState([]); // Holds all beats  
   const [filteredBeats, setFilteredBeats] = useState([]); // Holds filtered beats  
   const [filters, setFilters] = useState({ bpm: "all", genre: "all", mood: "all" });  
+  const [sortOption, setSortOption] = useState("newest"); // Default sorting option  
   const [showPopup, setShowPopup] = useState(false);  
   const [popupMessage, setPopupMessage] = useState("");  
   const [popupButtons, setPopupButtons] = useState([]);  
-  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null);  
+  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null); // Track currently playing audio ID  
+  const [reloadTrigger, setReloadTrigger] = useState(0); // Reload trigger for the popup  
 
-  const navigate = useNavigate(); 
+  const navigate = useNavigate();  
   const location = useLocation();  
 
+  // Effect for filters  
   useEffect(() => {  
     const params = new URLSearchParams(location.search);  
-
     const bpm = params.get("bpm") || "all";  
     const genre = params.get("genre") || "all";  
     const mood = params.get("mood") || "all";  
-
     setFilters({ bpm, genre, mood });  
-  }, [location.search]); 
+  }, [location.search]);  
 
   // Fetch beats data from Firestore  
   useEffect(() => {  
@@ -56,11 +57,11 @@ const BeatsPage = ({ isLoggedIn }) => {
           return {  
             ...data,  
             imageUrl: data.imageUrl || PLACEHOLDER_IMAGE,  
+            createdAt: data.createdAt ? data.createdAt.toDate() : new Date(), // Ensure proper dates  
           };  
         });  
-
         setBeats(beatsData);  
-        setFilteredBeats(beatsData); // Initialize filtered beats  
+        setFilteredBeats(beatsData);  
       } catch (error) {  
         console.error("Error fetching beats from Firestore:", error);  
         alert("Failed to fetch beats. Please try again later.");  
@@ -68,9 +69,9 @@ const BeatsPage = ({ isLoggedIn }) => {
     };  
 
     fetchBeats();  
-  }, []);  
+  }, [reloadTrigger]);  
 
-  // Update filtered beats whenever filters or beats change  
+  // Apply filters to the beats  
   useEffect(() => {  
     const applyFilters = () =>  
       beats.filter((beat) => {  
@@ -87,12 +88,64 @@ const BeatsPage = ({ isLoggedIn }) => {
         return bpmMatch && genreMatch && moodMatch;  
       });  
 
-    setFilteredBeats(applyFilters());  
+    const filtered = applyFilters();  
+    sortBeats(filtered);  
   }, [filters, beats]);  
 
-  const handleFilterChange = (e) => {  
-    const { name, value } = e.target;  
-    setFilters({ ...filters, [name]: value });  
+  const sortBeats = (beatsToSort = filteredBeats) => {  
+    const sortedBeats = [...beatsToSort];  
+
+    switch (sortOption) {  
+      case "newest":  
+        sortedBeats.sort((a, b) => b.createdAt - a.createdAt);  
+        break;  
+      case "oldest":  
+        sortedBeats.sort((a, b) => a.createdAt - b.createdAt);  
+        break;  
+      case "price-low-high":  
+        sortedBeats.sort((a, b) => (a.price || 0) - (b.price || 0));  
+        break;  
+      case "price-high-low":  
+        sortedBeats.sort((a, b) => (b.price || 0) - (a.price || 0));  
+        break;  
+      case "a-z":  
+        sortedBeats.sort((a, b) => (a.name || "").localeCompare(b.name || ""));  
+        break;  
+      case "z-a":  
+        sortedBeats.sort((a, b) => (b.name || "").localeCompare(a.name || ""));  
+        break;  
+      default:  
+        break;  
+    }  
+
+    setFilteredBeats(sortedBeats);  
+  };  
+
+  useEffect(() => {  
+    sortBeats(); // Re-sort when sort option changes  
+  }, [sortOption]);  
+
+  const handlePlayPause = (id, audioRef) => {  
+    // Stop any currently playing audio if it's different from the clicked audio  
+    if (currentlyPlayingId && currentlyPlayingId !== id) {  
+      const currentlyPlayingAudio = document.getElementById(currentlyPlayingId);  
+      if (currentlyPlayingAudio) {  
+        currentlyPlayingAudio.pause();  
+        currentlyPlayingAudio.currentTime = 0; // Reset the audio playback position  
+      }  
+    }  
+
+    // Update the state with the ID of the currently playing audio  
+    setCurrentlyPlayingId((prevId) => (prevId === id ? null : id));  
+
+    // Play or pause the clicked audio  
+    if (audioRef.current) {  
+      if (currentlyPlayingId !== id) {  
+        audioRef.current.play();  
+      } else {  
+        audioRef.current.pause();  
+      }  
+    }  
   };  
 
   const handleAddToCart = (beat) => {  
@@ -129,7 +182,10 @@ const BeatsPage = ({ isLoggedIn }) => {
     setShowPopup(true);  
   };  
 
-  const closePopup = () => setShowPopup(false);  
+  const closePopup = () => {  
+    setShowPopup(false);  
+    setReloadTrigger((prev) => prev + 1);  
+  };  
 
   const redirectTo = (path) => navigate(path, { replace: true });  
 
@@ -141,34 +197,56 @@ const BeatsPage = ({ isLoggedIn }) => {
       </header>  
 
       {/* Filters Section */}  
-      <section className="bg-gray-800 p-6 shadow-lg rounded-lg mb-8">  
+      <section className="bg-gray-800 p-6 shadow-lg rounded-lg mb-4">  
         <form className="flex flex-col md:flex-row items-center justify-center gap-4">  
           <FilterSelect  
             name="bpm"  
             label="BPM"  
             value={filters.bpm}  
-            handleChange={handleFilterChange}  
+            handleChange={(e) => setFilters({ ...filters, [e.target.name]: e.target.value })}  
             options={["all", "60-90", "91-120", "121-150", "151+"]}  
           />  
           <FilterSelect  
             name="genre"  
             label="Genre"  
             value={filters.genre}  
-            handleChange={handleFilterChange}  
+            handleChange={(e) => setFilters({ ...filters, [e.target.name]: e.target.value })}  
             options={["all", "Trap", "Lofi", "Drill", "Hip-Hop", "R&B"]}  
           />  
           <FilterSelect  
             name="mood"  
             label="Mood"  
             value={filters.mood}  
-            handleChange={handleFilterChange}  
-            options={["all", "Dark", "Chill", "Energetic", "WestCoast","Ethnic","Happy","Sad"]}  
+            handleChange={(e) => setFilters({ ...filters, [e.target.name]: e.target.value })}  
+            options={["all", "Dark", "Chill", "Energetic", "WestCoast", "Ethnic", "Happy", "Sad"]}  
           />  
         </form>  
       </section>  
 
+      {/* Sort Section */}  
+      <section className="flex justify-end mb-6">  
+        <div className="flex items-center">  
+          <label htmlFor="sort" className="text-sm text-gray-300 mr-2">  
+            Sort By:  
+          </label>  
+          <select  
+            id="sort"  
+            value={sortOption}  
+            onChange={(e) => setSortOption(e.target.value)}  
+            className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"  
+          >  
+            <option value="newest">Newest First</option>  
+            <option value="oldest">Oldest First</option>  
+            <option value="price-low-high">Price (Low-High)</option>  
+            <option value="price-high-low">Price (High-Low)</option>  
+            <option value="a-z">A-Z</option>  
+            <option value="z-a">Z-A</option>  
+          </select>  
+        </div>  
+      </section>  
+
       {/* Beats Section */}  
-      <section>  
+      <section className="mt-8">  
         {filteredBeats.length > 0 ? (  
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">  
             {filteredBeats.map((beat) => (  
@@ -176,7 +254,7 @@ const BeatsPage = ({ isLoggedIn }) => {
                 key={beat.id}  
                 beat={beat}  
                 isPlaying={currentlyPlayingId === beat.id}  
-                onPlayPause={(id) => setCurrentlyPlayingId(currentlyPlayingId === id ? null : id)}  
+                onPlayPause={handlePlayPause}  
                 handleAddToCart={handleAddToCart}  
               />  
             ))}  
@@ -188,10 +266,6 @@ const BeatsPage = ({ isLoggedIn }) => {
 
       {/* Popup */}  
       {showPopup && <Popup message={popupMessage} buttons={popupButtons} />}  
-
-      <footer className="text-center text-xs text-gray-600 mt-12">  
-        © 2025 Beats Garage. All rights reserved.  
-      </footer>  
     </div>  
   );  
 };  
@@ -218,7 +292,7 @@ const FilterSelect = ({ name, label, value, handleChange, options }) => (
   </div>  
 );  
 
-// AudioPlayer Component (Handles Images)  
+// AudioPlayer Component  
 const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {  
   const audioRef = useRef(null);  
   const [time, setTime] = useState({ current: "0:00", total: "0:00" });  
@@ -236,13 +310,13 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {
 
     const handleLoadedMetadata = () => {  
       if (audioElement) {  
-        setTime({ ...time, total: formatTime(audioElement.duration || 0) });  
+        setTime((prev) => ({ ...prev, total: formatTime(audioElement.duration || 0) }));  
       }  
     };  
 
     const handleTimeUpdate = () => {  
       if (audioElement) {  
-        setTime({ ...time, current: formatTime(audioElement.currentTime || 0) });  
+        setTime((prev) => ({ ...prev, current: formatTime(audioElement.currentTime || 0) }));  
         setProgress((audioElement.currentTime / audioElement.duration) * 100 || 0);  
       }  
     };  
@@ -267,7 +341,7 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {
       } else {  
         audioRef.current.play();  
       }  
-      onPlayPause(beat.id);  
+      onPlayPause(beat.id, audioRef); // Pass the beat ID and the ref  
     }  
   };  
 
@@ -304,8 +378,7 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {
               onClick={() => handleAddToCart(beat)}  
               className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white flex items-center gap-1 font-bold"  
             >  
-              <ShoppingCart size={18} />  
-              Add to Cart  
+              <ShoppingCart size={18} /> Add to Cart  
             </button>  
           </div>  
           <input  
@@ -327,11 +400,12 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {
           loading="lazy"  
         />  
       </div>  
-      <audio ref={audioRef} src={beat.audioUrl} preload="metadata"></audio>  
+      <audio id={beat.id} ref={audioRef} src={beat.audioUrl} preload="metadata" />  
     </div>  
   );  
 };  
 
+// PropTypes  
 BeatsPage.propTypes = {  
   isLoggedIn: PropTypes.bool.isRequired,  
 };  
