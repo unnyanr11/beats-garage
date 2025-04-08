@@ -84,10 +84,11 @@ const Filters = ({ onChangeFilters }) => {
                 className="form-select w-full p-2 border-2 border-white bg-black text-white rounded focus:ring focus:ring-red-500"  
               >  
                 <option value="all">All Genres</option>  
-                <option value="trap">Trap</option>  
-                <option value="lofi">Lo-Fi</option>  
-                <option value="drill">Drill</option>  
-                <option value="edm">EDM</option>  
+                <option value="Trap">Trap</option>  
+                <option value="Lofi">Lo-Fi</option>  
+                <option value="Drill">Drill</option>  
+                <option value="Hip-Hop">Hip-hop</option>  
+                <option value="R&B">R&B</option> 
               </select>  
             </div>  
 
@@ -107,10 +108,13 @@ const Filters = ({ onChangeFilters }) => {
                 className="form-select w-full p-2 border-2 border-white bg-black text-white rounded focus:ring focus:ring-red-500"  
               >  
                 <option value="all">All Moods</option>  
-                <option value="happy">Happy</option>  
-                <option value="sad">Sad</option>  
-                <option value="ethnic">Ethnic</option>  
-                <option value="dark">Dark</option>  
+                <option value="Dark">Dark</option>  
+                <option value="hill">Chill</option>  
+                <option value="Energetic">Energetic</option>  
+                <option value="Westcoast">WestCoast</option>  
+                <option value="Wthnic">Ethnic</option>
+                <option value="Happy">Happy</option>
+                <option value="Sad">Sad</option>
               </select>  
             </div>  
           </div>  

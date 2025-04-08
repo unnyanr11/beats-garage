@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";  
 import PropTypes from "prop-types";  
-import { useNavigate } from "react-router-dom";  
+import { useNavigate, useLocation } from "react-router-dom";  
 import { ShoppingCart } from "lucide-react";  
 import { db } from "../firebase";  
 import { collection, getDocs } from "firebase/firestore";  
@@ -27,12 +27,23 @@ const BeatsPage = ({ isLoggedIn }) => {
   const [beats, setBeats] = useState([]); // Holds all beats  
   const [filteredBeats, setFilteredBeats] = useState([]); // Holds filtered beats  
   const [filters, setFilters] = useState({ bpm: "all", genre: "all", mood: "all" });  
-  const [showPopup, setShowPopup] = useState(false); // Popup state  
+  const [showPopup, setShowPopup] = useState(false);  
   const [popupMessage, setPopupMessage] = useState("");  
   const [popupButtons, setPopupButtons] = useState([]);  
-  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null); // Tracks currently playing beat  
+  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null);  
 
-  const navigate = useNavigate();  
+  const navigate = useNavigate(); 
+  const location = useLocation();  
+
+  useEffect(() => {  
+    const params = new URLSearchParams(location.search);  
+
+    const bpm = params.get("bpm") || "all";  
+    const genre = params.get("genre") || "all";  
+    const mood = params.get("mood") || "all";  
+
+    setFilters({ bpm, genre, mood });  
+  }, [location.search]); 
 
   // Fetch beats data from Firestore  
   useEffect(() => {  
@@ -42,14 +53,12 @@ const BeatsPage = ({ isLoggedIn }) => {
         const snapshot = await getDocs(beatsCollection);  
         const beatsData = snapshot.docs.map((doc) => {  
           const data = { id: doc.id, ...doc.data() };  
-          // Ensure imageURL fallback during data fetch  
           return {  
             ...data,  
             imageUrl: data.imageUrl || PLACEHOLDER_IMAGE,  
           };  
         });  
 
-        console.log("Fetched beats data:", beatsData); // Debugging fetched data  
         setBeats(beatsData);  
         setFilteredBeats(beatsData); // Initialize filtered beats  
       } catch (error) {  
@@ -146,14 +155,14 @@ const BeatsPage = ({ isLoggedIn }) => {
             label="Genre"  
             value={filters.genre}  
             handleChange={handleFilterChange}  
-            options={["all", "trap", "lofi", "drill", "edm"]}  
+            options={["all", "Trap", "Lofi", "Drill", "Hip-Hop", "R&B"]}  
           />  
           <FilterSelect  
             name="mood"  
             label="Mood"  
             value={filters.mood}  
             handleChange={handleFilterChange}  
-            options={["all", "dark", "chill", "energetic", "upbeat"]}  
+            options={["all", "Dark", "Chill", "Energetic", "WestCoast","Ethnic","Happy","Sad"]}  
           />  
         </form>  
       </section>  
@@ -167,9 +176,7 @@ const BeatsPage = ({ isLoggedIn }) => {
                 key={beat.id}  
                 beat={beat}  
                 isPlaying={currentlyPlayingId === beat.id}  
-                onPlayPause={(id) =>  
-                  setCurrentlyPlayingId(currentlyPlayingId === id ? null : id)  
-                }  
+                onPlayPause={(id) => setCurrentlyPlayingId(currentlyPlayingId === id ? null : id)}  
                 handleAddToCart={handleAddToCart}  
               />  
             ))}  
@@ -316,7 +323,7 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {
         <img  
           src={beat.imageUrl || PLACEHOLDER_IMAGE}  
           alt={beat.name || "No Image"}  
-          className="w-full h-full object-cover "  
+          className="w-full h-full object-cover"  
           loading="lazy"  
         />  
       </div>  
