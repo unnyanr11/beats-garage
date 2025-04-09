@@ -8,7 +8,7 @@ const Footer = () => {
       <div className="flex justify-center space-x-6 text-2xl">  
         {/* Instagram */}  
         <a  
-          href="https://www.instagram.com/yourprofile" // Replace with your Instagram URL  
+          href="https://www.instagram.com/gypsum.boy/" // Replace with your Instagram URL  
           target="_blank"  
           rel="noopener noreferrer"  
           className="text-white hover:text-pink-500 transition duration-300"  
@@ -17,7 +17,7 @@ const Footer = () => {
         </a>  
         {/* SoundCloud */}  
         <a  
-          href="https://www.soundcloud.com/yourprofile" // Replace with your SoundCloud URL  
+          href="https://soundcloud.com/user-181720024" // Replace with your SoundCloud URL  
           target="_blank"  
           rel="noopener noreferrer"  
           className="text-white hover:text-orange-500 transition duration-300"  
@@ -26,7 +26,7 @@ const Footer = () => {
         </a>  
         {/* Twitter */}  
         <a  
-          href="https://www.twitter.com/yourprofile" // Replace with your Twitter URL  
+          href="https://x.com/UnnyanR" // Replace with your Twitter URL  
           target="_blank"  
           rel="noopener noreferrer"  
           className="text-white hover:text-blue-400 transition duration-300"  
