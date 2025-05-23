@@ -1,0 +1,40 @@
+@import "tailwindcss/base";  
+@import "tailwindcss/components";  
+@import "tailwindcss/utilities";  
+
+/* Custom Button Styles */  
+.btn-custom {  
+    @apply inline-block font-bold text-center text-white bg-black border border-white rounded-lg select-none; /* Base button styles */  
+    @apply transition-all duration-300 ease-in-out; /* Smooth transitions */  
+    padding: 10px 20px; /* Adds consistent padding */  
+}  
+
+.btn-custom:hover {  
+    @apply bg-red-500 text-black; /* Changes background and text color on hover */  
+    transform: scale(1.05); /* Slight size increase */  
+    box-shadow: 0px 8px 12px rgba(255, 0, 0, 0.8); /* Adds hover shadow */  
+}  
+
+.btn-custom:focus {  
+    @apply outline-none focus:ring-4 focus:ring-red-500; /* Removes outline and adds focus ring */  
+    @apply bg-red-500 text-black; /* Matches hover behavior */  
+    transform: scale(1.05); /* Maintain size increase */  
+    box-shadow: 0px 8px 12px rgba(255, 0, 0, 0.8); /* Same as hover shadow */  
+}  
+
+.btn-custom:active {  
+    transform: scale(1); /* Removes size increase during active state */  
+    box-shadow: 0px 4px 6px rgba(255, 0, 0, 0.5); /* Subdued shadow for pressed state */  
+    @apply bg-black text-white; /* Return to default black background and white text */  
+}  
+
+/* Custom Outline Button Styles */  
+.btn-outline {  
+    @apply inline-block px-6 py-2 font-bold text-white bg-black border-2 border-red-500 rounded-lg; /* Base styles for outline buttons */  
+    @apply transition-all duration-300 ease-in-out; /* Smooth transitions */  
+}  
+
+.btn-outline:hover {  
+    @apply bg-red-500 text-black border-white; /* Changes to red background and white border on hover */  
+    transform: scale(1.05); /* Slight size increase */  
+}  
