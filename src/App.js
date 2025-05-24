@@ -9,7 +9,8 @@ import { useAuthState } from "react-firebase-hooks/auth";
 // Core Components  
 import Header from "./components/Header";  
 import Footer from "./components/Footer";  
-import ContactForm from "./components/ContactForm";  
+import ContactForm from "./components/ContactForm";
+import PaymentSuccess from "./pages/PaymentSuccess";  
 
 // Lazy Load Pages for Better Performance  
 const HeroSection = lazy(() => import("./components/HeroSection"));  
@@ -153,7 +154,7 @@ const App = () => {
                   </ProtectedRoute>  
                 }  
               />  
-
+              <Route path="/success" element={<PaymentSuccess />} />
               {/* 404 Page */}  
               <Route path="*" element={<NotFound />} />  
             </Routes>  
