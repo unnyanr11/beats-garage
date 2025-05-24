@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from "react";  
-import { FiAirplay } from 'react-icons/fi'; // Example for Feather Icons
 import PropTypes from "prop-types";  
 import { ShoppingCart } from "lucide-react";  
 import { useNavigate } from "react-router-dom";  
