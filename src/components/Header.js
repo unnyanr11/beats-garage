@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";  
 import { useLocation, useNavigate } from "react-router-dom";  
 import { auth } from "../firebase"; // Firebase authentication setup  
+
 import { useAuthState } from "react-firebase-hooks/auth";  
 import { FiShoppingCart } from "react-icons/fi"; // Import cart icon  
 

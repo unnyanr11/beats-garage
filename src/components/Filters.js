@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import PropTypes from "prop-types";  
 import { useNavigate } from "react-router-dom";  
 
+
 /**  
  * Filters Component - Allows users to select filters (BPM, Genre, Mood)   
  * and navigate to the BeatsPage with query parameters.  

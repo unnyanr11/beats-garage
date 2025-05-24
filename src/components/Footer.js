@@ -1,4 +1,5 @@
 import React from "react";  
+
 import { FaInstagram, FaSoundcloud, FaTwitter } from "react-icons/fa"; // Import specific social media icons  
 
 const Footer = () => {  

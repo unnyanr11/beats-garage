@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { auth, googleProvider } from "../firebaseConfig";  
 import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";  
 
+
 const Login = () => {  
     const [formData, setFormData] = useState({  
         email: "",  
