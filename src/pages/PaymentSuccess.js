@@ -74,7 +74,7 @@ const PaymentSuccess = () => {
   }, [paymentId, navigate]);
 
   if (!isValidPayment) {
-    return null; // Or display a loading indicator
+    return null; // Optionally display a loading indicator while validating
   }
 
   return (
