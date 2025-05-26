@@ -1,57 +1,81 @@
-import React, { useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
-import app from '../firebase'; // Correct import for the default export
+import app from '../firebase';
 
 const db = getFirestore(app);
 
 const PaymentSuccess = () => {
   const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const productId = searchParams.get('productId');
+  const navigate = useNavigate();
+  const [isValidPayment, setIsValidPayment] = useState(false);
+  const paymentId = new URLSearchParams(location.search).get('paymentId');
 
   useEffect(() => {
-    const sendEmailWithDriveLink = async () => {
-      if (productId) {
+    const validatePayment = async () => {
+      if (paymentId) {
         try {
-          const productRef = doc(db, "products", productId);
-          const productSnap = await getDoc(productRef);
+          // Reference to the payment document in Firestore
+          const paymentRef = doc(db, "payments", paymentId);
+          const paymentSnap = await getDoc(paymentRef);
 
-          if (productSnap.exists()) {
-            const productData = productSnap.data();
-            const driveLink = productData.driveLink;
+          if (paymentSnap.exists()) {
+            // Payment ID is valid, proceed to display success message
+            setIsValidPayment(true);
 
-            const userEmail = localStorage.getItem('userEmail');
+            const paymentData = paymentSnap.data();
+            const productId = paymentData.productId;
 
-            if (userEmail && driveLink) {
-              const sendEmail = async (email, link) => {
-                const response = await fetch(`https://your-cloud-function-url.cloudfunctions.net/sendEmail?email=${email}&driveLink=${link}`);
-                if (!response.ok) {
-                  console.error('Failed to send email:', response.statusText);
-                } else {
-                  console.log('Email sent successfully!');
+            // Fetch product details
+            const productRef = doc(db, "products", productId);
+            const productSnap = await getDoc(productRef);
 
-                  // Clear the cart after payment confirmation and email sending
-                  localStorage.removeItem("cartItems"); // Clear the cart
-                  console.log('Cart cleared successfully after payment!'); // Debugging
-                }
-              };
+            if (productSnap.exists()) {
+              const productData = productSnap.data();
+              const driveLink = productData.driveLink;
+              const userEmail = localStorage.getItem('userEmail');
 
-              await sendEmail(userEmail, driveLink);
+              if (userEmail && driveLink) {
+                const sendEmail = async (email, link) => {
+                  const response = await fetch(`https://your-cloud-function-url.cloudfunctions.net/sendEmail?email=${email}&driveLink=${link}`);
+                  if (!response.ok) {
+                    console.error('Failed to send email:', response.statusText);
+                  } else {
+                    console.log('Email sent successfully!');
+                    localStorage.removeItem("cartItems");
+                    console.log('Cart cleared successfully after payment!');
+                  }
+                };
+
+                await sendEmail(userEmail, driveLink);
+              } else {
+                console.warn("User email or drive link not available.");
+              }
             } else {
-              console.warn("User email or drive link not available.");
+              console.log("No such product!");
             }
           } else {
-            console.log("No such document!");
+            // Payment ID is invalid, redirect to error page or home page
+            console.warn("Invalid payment ID. Redirecting...");
+            navigate('/'); // Redirect to home page or error page
           }
         } catch (error) {
-          console.error("Error fetching product or sending email:", error);
+          console.error("Error validating payment:", error);
+          navigate('/'); // Redirect to home page or error page
         }
+      } else {
+        // No payment ID, redirect to error page or home page
+        console.warn("No payment ID. Redirecting...");
+        navigate('/'); // Redirect to home page or error page
       }
     };
 
-    sendEmailWithDriveLink();
-  }, [productId]);
+    validatePayment();
+  }, [paymentId, navigate]);
+
+  if (!isValidPayment) {
+    return null; // Or display a loading indicator
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex justify-center items-center py-20">

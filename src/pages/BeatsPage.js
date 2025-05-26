@@ -3,7 +3,7 @@ import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";  
 import { ShoppingCart } from "lucide-react";  
 import { db } from "../firebase";  
-import { collection, getDocs } from "firebase/firestore";  
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore"; // Import doc and updateDoc  
 import Popup from "../pages/Popup";  
 
 // Constants  
@@ -24,15 +24,15 @@ const isBeatInCart = (beat) => getCartItems().some((item) => item.id === beat.id
 
 // BeatsPage Component  
 const BeatsPage = ({ isLoggedIn }) => {  
-  const [beats, setBeats] = useState([]); // Holds all beats  
-  const [filteredBeats, setFilteredBeats] = useState([]); // Holds filtered beats  
+  const [beats, setBeats] = useState([]);  
+  const [filteredBeats, setFilteredBeats] = useState([]);  
   const [filters, setFilters] = useState({ bpm: "all", genre: "all", mood: "all" });  
-  const [sortOption, setSortOption] = useState("newest"); // Default sorting option  
+  const [sortOption, setSortOption] = useState("newest");  
   const [showPopup, setShowPopup] = useState(false);  
   const [popupMessage, setPopupMessage] = useState("");  
   const [popupButtons, setPopupButtons] = useState([]);  
-  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null); // Track currently playing audio ID  
-  const [reloadTrigger, setReloadTrigger] = useState(0); // Reload trigger for the popup  
+  const [currentlyPlayingId, setCurrentlyPlayingId] = useState(null);  
+  const [reloadTrigger, setReloadTrigger] = useState(0);  
 
   const navigate = useNavigate();  
   const location = useLocation();  
@@ -57,7 +57,8 @@ const BeatsPage = ({ isLoggedIn }) => {
           return {  
             ...data,  
             imageUrl: data.imageUrl || PLACEHOLDER_IMAGE,  
-            createdAt: data.createdAt ? data.createdAt.toDate() : new Date(), // Ensure proper dates  
+            createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),  
+            isAvailable: data.isAvailable,  
           };  
         });  
         setBeats(beatsData);  
@@ -85,7 +86,7 @@ const BeatsPage = ({ isLoggedIn }) => {
         const genreMatch = filters.genre === "all" || filters.genre === beat.genre;  
         const moodMatch = filters.mood === "all" || filters.mood === beat.mood;  
 
-        return bpmMatch && genreMatch && moodMatch;  
+        return bpmMatch && genreMatch && moodMatch; // Removed availability check here for now  
       });  
 
     const filtered = applyFilters();  
@@ -148,17 +149,44 @@ const BeatsPage = ({ isLoggedIn }) => {
     }  
   };  
 
-  const handleAddToCart = (beat) => {  
+  const handleAddToCart = async (beat) => {  
     if (isLoggedIn) {  
       if (isBeatInCart(beat)) {  
         showPopupWithMessage(`"${beat.name}" is already in your cart.`, [  
           { label: "Close", className: "bg-blue-500 hover:bg-blue-600", onClick: closePopup },  
         ]);  
       } else {  
-        saveCartItems([...getCartItems(), beat]);  
-        showPopupWithMessage(`"${beat.name}" added to your cart!`, [  
-          { label: "Close", className: "bg-green-500 hover:bg-green-600", onClick: closePopup },  
-        ]);  
+        try {  
+          // Reference to the beat document in Firestore  
+          const beatDocRef = doc(db, "beats", beat.id);  
+
+          // Update the isAvailable field to false  
+          await updateDoc(beatDocRef, { isAvailable: false });  
+
+          // Optimistically update the local state  
+          setBeats(currentBeats =>  
+            currentBeats.map(b =>  
+              b.id === beat.id ? { ...b, isAvailable: false } : b  
+            )  
+          );  
+          setFilteredBeats(currentFilteredBeats =>  
+            currentFilteredBeats.map(b =>  
+              b.id === beat.id ? { ...b, isAvailable: false } : b  
+            )  
+          );  
+
+          setReloadTrigger(prev => prev + 1);  
+
+          saveCartItems([...getCartItems(), beat]);  
+          showPopupWithMessage(`"${beat.name}" added to your cart!`, [  
+            { label: "Close", className: "bg-green-500 hover:bg-green-600", onClick: closePopup },  
+          ]);  
+        } catch (error) {  
+          console.error("Error updating beat availability:", error);  
+          showPopupWithMessage("Failed to update beat availability. Please try again.", [  
+            { label: "Close", className: "bg-red-500 hover:bg-red-600", onClick: closePopup },  
+          ]);  
+        }  
       }  
     } else {  
       showPopupWithMessage(`Log in or sign up to buy "${beat.name}".`, [  
@@ -171,9 +199,9 @@ const BeatsPage = ({ isLoggedIn }) => {
           label: "Sign Up",  
           className: "bg-green-500 hover:bg-green-600",  
           onClick: () => redirectTo("/signup"),  
-        },
+        },  
         {  
-          label: "Close", // Close button below the primary buttons  
+          label: "Close",  
           className: "bg-red-500 hover:bg-red-600",  
           onClick: closePopup,  
         },  
@@ -216,7 +244,7 @@ const BeatsPage = ({ isLoggedIn }) => {
             label="Genre"  
             value={filters.genre}  
             handleChange={(e) => setFilters({ ...filters, [e.target.name]: e.target.value })}  
-            options={["all", "Trap", "Lofi", "Drill", "Hip-Hop", "R&B","Latin"]}  
+            options={["all", "Trap", "Lofi", "Drill", "Hip-Hop", "R&B", "Latin"]}  
           />  
           <FilterSelect  
             name="mood"  
@@ -254,189 +282,197 @@ const BeatsPage = ({ isLoggedIn }) => {
       <section className="mt-8">  
         {filteredBeats.length > 0 ? (  
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">  
-            {filteredBeats.map((beat) => (  
-              <AudioPlayer  
-                key={beat.id}  
-                beat={beat}  
-                isPlaying={currentlyPlayingId === beat.id}  
-                onPlayPause={handlePlayPause}  
-                handleAddToCart={handleAddToCart}  
-              />  
-            ))}  
-          </div>  
-        ) : (  
-          <p className="text-gray-400 text-center">No beats match the selected filters.</p>  
-        )}  
-      </section>  
+            {filteredBeats.map((beat) => {  
+              return (  
+              <AudioPlayer                key={beat.id}
+                beat={beat}
+                isPlaying={currentlyPlayingId === beat.id}
+                onPlayPause={handlePlayPause}
+                handleAddToCart={handleAddToCart}
+                isAvailable={beat.isAvailable} // Pass availability to AudioPlayer
+              />)
+            }
+            )}
+          </div>
+        ) : (
+          <p className="text-gray-400 text-center">No beats match the selected filters.</p>
+        )}
+      </section>
 
-      {/* Popup */}  
-      {showPopup && <Popup message={popupMessage} buttons={popupButtons} />}  
-    </div>  
-  );  
-};  
+      {/* Popup */}
+      {showPopup && <Popup message={popupMessage} buttons={popupButtons} />}
+    </div>
+  );
+};
 
-// FilterSelect Component  
-const FilterSelect = ({ name, label, value, handleChange, options }) => (  
-  <div className="flex flex-col">  
-    <label htmlFor={name} className="text-sm text-gray-300 mb-1">  
-      {label}  
-    </label>  
-    <select  
-      id={name}  
-      name={name}  
-      value={value}  
-      onChange={handleChange}  
-      className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"  
-    >  
-      {options.map((option) => (  
-        <option key={option} value={option}>  
-          {option === "all" ? `All ${label}s` : option}  
-        </option>  
-      ))}  
-    </select>  
-  </div>  
-);  
+// FilterSelect Component
+const FilterSelect = ({ name, label, value, handleChange, options }) => (
+  <div className="flex flex-col">
+    <label htmlFor={name} className="text-sm text-gray-300 mb-1">
+      {label}
+    </label>
+    <select
+      id={name}
+      name={name}
+      value={value}
+      onChange={handleChange}
+      className="bg-black border border-gray-600 text-white rounded-lg px-4 py-2"
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option === "all" ? `All ${label}s` : option}
+        </option>
+      ))}
+    </select>
+  </div>
+);
 
-// AudioPlayer Component  
-const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart }) => {  
-  const audioRef = useRef(null);  
-  const [time, setTime] = useState({ current: "0:00", total: "0:00" });  
-  const [progress, setProgress] = useState(0);  
+// AudioPlayer Component (formerly BeatCard)
+const AudioPlayer = ({ beat, isPlaying, onPlayPause, handleAddToCart, isAvailable }) => {
+  const audioRef = useRef(null);
+  const [time, setTime] = useState({ current: "0:00", total: "0:00" });
+  const [progress, setProgress] = useState(0);
 
-  const formatTime = (secs) => {  
-    if (!secs || isNaN(secs)) return "0:00";  
-    const minutes = Math.floor(secs / 60);  
-    const seconds = Math.floor(secs % 60).toString().padStart(2, "0");  
-    return `${minutes}:${seconds}`;  
-  };  
+  const formatTime = (secs) => {
+    if (!secs || isNaN(secs)) return "0:00";
+    const minutes = Math.floor(secs / 60);
+    const seconds = Math.floor(secs % 60).toString().padStart(2, "0");
+    return `${minutes}:${seconds}`;
+  };
 
-  useEffect(() => {  
-    const audioElement = audioRef.current;  
+  useEffect(() => {
+    const audioElement = audioRef.current;
 
-    const handleLoadedMetadata = () => {  
-      if (audioElement) {  
-        setTime((prev) => ({ ...prev, total: formatTime(audioElement.duration || 0) }));  
-      }  
-    };  
+    const handleLoadedMetadata = () => {
+      if (audioElement) {
+        setTime((prev) => ({ ...prev, total: formatTime(audioElement.duration || 0) }));
+      }
+    };
 
-    const handleTimeUpdate = () => {  
-      if (audioElement) {  
-        setTime((prev) => ({ ...prev, current: formatTime(audioElement.currentTime || 0) }));  
-        setProgress((audioElement.currentTime / audioElement.duration) * 100 || 0);  
-      }  
-    };  
+    const handleTimeUpdate = () => {
+      if (audioElement) {
+        setTime((prev) => ({ ...prev, current: formatTime(audioElement.currentTime || 0) }));
+        setProgress((audioElement.currentTime / audioElement.duration) * 100 || 0);
+      }
+    };
 
-    if (audioElement) {  
-      audioElement.addEventListener("loadedmetadata", handleLoadedMetadata);  
-      audioElement.addEventListener("timeupdate", handleTimeUpdate);  
-    }  
+    if (audioElement) {
+      audioElement.addEventListener("loadedmetadata", handleLoadedMetadata);
+      audioElement.addEventListener("timeupdate", handleTimeUpdate);
+    }
 
-    return () => {  
-      if (audioElement) {  
-        audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);  
-        audioElement.removeEventListener("timeupdate", handleTimeUpdate);  
-      }  
-    };  
-  }, [beat.audioUrl]);  
+    return () => {
+      if (audioElement) {
+        audioElement.removeEventListener("loadedmetadata", handleLoadedMetadata);
+        audioElement.removeEventListener("timeupdate", handleTimeUpdate);
+      }
+    };
+  }, [beat.audioUrl]);
 
-  const handlePlayPauseClick = () => {  
-    if (audioRef.current) {  
-      if (isPlaying) {  
-        audioRef.current.pause();  
-      } else {  
-        audioRef.current.play();  
-      }  
-      onPlayPause(beat.id, audioRef); // Pass the beat ID and the ref  
-    }  
-  };  
+  const handlePlayPauseClick = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      onPlayPause(beat.id, audioRef);
+    }
+  };
 
-  const handleSliderChange = (e) => {  
-    if (audioRef.current) {  
-      const newTime = (e.target.value / 100) * audioRef.current.duration;  
-      audioRef.current.currentTime = newTime;  
-      setProgress(e.target.value);  
-    }  
-  };  
+  const handleSliderChange = (e) => {
+    if (audioRef.current) {
+      const newTime = (e.target.value / 100) * audioRef.current.duration;
+      audioRef.current.currentTime = newTime;
+      setProgress(e.target.value);
+    }
+  };
 
-  return (  
-    <div className="p-4 bg-gray-800 rounded-lg shadow-lg flex items-center gap-4">  
-      <div className="flex-1">  
-        <h2 className="font-bold text-lg mb-2">{beat.name || "Untitled Beat"}</h2>  
-        <p className="text-gray-300">  
-          Genre: {beat.genre || "N/A"} | BPM: {beat.bpm || "N/A"} | Mood: {beat.mood || "N/A"}  
-        </p>  
-        <p className="text-green-400 font-bold">${beat.price?.toFixed(2) || "0.00"}</p>  
-        <div className="mt-4 flex flex-col items-start">  
-          <div className="flex items-center gap-4">  
-            <button  
-              onClick={handlePlayPauseClick}  
-              className={`px-4 py-2 font-bold text-white rounded-lg ${  
-                isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"  
-              }`}  
-            >  
-              {isPlaying ? "Pause" : "Play"}  
-            </button>  
-            <span className="text-gray-300 text-sm">  
-              {time.current} / {time.total}  
-            </span>  
-            <button  
-              onClick={() => handleAddToCart(beat)}  
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white flex items-center gap-1 font-bold"  
-            >  
-              <ShoppingCart size={18} /> Add to Cart  
-            </button>  
-          </div>  
-          <input  
-            type="range"  
-            min={0}  
-            max={100}  
-            value={progress}  
-            onChange={handleSliderChange}  
-            className="mt-4 w-full h-2 bg-gray-700 rounded-lg cursor-pointer"  
-            style={{ background: `linear-gradient(to right, #4caf50 ${progress}%, #555 ${progress}%)` }}  
-          />  
-        </div>  
-      </div>  
-      <div className="w-44 h-44">  
-        <img  
-          src={beat.imageUrl || PLACEHOLDER_IMAGE}  
-          alt={beat.name || "No Image"}  
-          className="w-full h-full object-cover"  
-          loading="lazy"  
-        />  
-      </div>  
-      <audio id={beat.id} ref={audioRef} src={beat.audioUrl} preload="metadata" />  
-    </div>  
-  );  
-};  
+  return (
+    <div className="p-4 bg-gray-800 rounded-lg shadow-lg flex items-center gap-4">
+      <div className="flex-1">
+        <h2 className="font-bold text-lg mb-2">{beat.name || "Untitled Beat"}</h2>
+        <p className="text-gray-300">
+          Genre: {beat.genre || "N/A"} | BPM: {beat.bpm || "N/A"} | Mood: {beat.mood || "N/A"}
+        </p>
+        <p className="text-green-400 font-bold">${beat.price?.toFixed(2) || "0.00"}</p>
+        <div className="mt-4 flex flex-col items-start">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={handlePlayPauseClick}
+              className={`px-4 py-2 font-bold text-white rounded-lg ${
+                isPlaying ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600"
+              }`}
+            >
+              {isPlaying ? "Pause" : "Play"}
+            </button>
+            <span className="text-gray-300 text-sm">
+              {time.current} / {time.total}
+            </span>
+            <button
+              onClick={() => handleAddToCart(beat)}
+              disabled={!isAvailable}
+              className={`px-4 py-2 rounded-lg text-white flex items-center gap-1 font-bold ${
+                isAvailable ? "bg-blue-500 hover:bg-blue-600" : "bg-gray-600 cursor-not-allowed"
+              }`}
+            >
+              <ShoppingCart size={18} />
+              {isAvailable ? "Add to Cart" : "Sold Out"}
+            </button>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={progress}
+            onChange={handleSliderChange}
+            className="mt-4 w-full h-2 bg-gray-700 rounded-lg cursor-pointer"
+            style={{ background: `linear-gradient(to right, #4caf50 ${progress}%, #555 ${progress}%)` }}
+          />
+        </div>
+      </div>
+      <div className="w-44 h-44">
+        <img
+          src={beat.imageUrl || PLACEHOLDER_IMAGE}
+          alt={beat.name || "No Image"}
+          className="w-full h-full object-cover"
+          loading="lazy"
+        />
+      </div>
+      <audio id={beat.id} ref={audioRef} src={beat.audioUrl} preload="metadata" />
+    </div>
+  );
+};
 
-// PropTypes  
-BeatsPage.propTypes = {  
-  isLoggedIn: PropTypes.bool.isRequired,  
-};  
+// PropTypes
+BeatsPage.propTypes = {
+  isLoggedIn: PropTypes.bool.isRequired,
+};
 
-AudioPlayer.propTypes = {  
-  beat: PropTypes.shape({  
-    id: PropTypes.string.isRequired,  
-    name: PropTypes.string,  
-    genre: PropTypes.string,  
-    bpm: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),  
-    mood: PropTypes.string,  
-    price: PropTypes.number,  
-    imageUrl: PropTypes.string,  
-    audioUrl: PropTypes.string.isRequired,  
-  }).isRequired,  
-  isPlaying: PropTypes.bool.isRequired,  
-  onPlayPause: PropTypes.func.isRequired,  
-  handleAddToCart: PropTypes.func.isRequired,  
-};  
+AudioPlayer.propTypes = {
+  beat: PropTypes.shape({
+    id: PropTypes.string.isRequired,
+    name: PropTypes.string,
+    genre: PropTypes.string,
+    bpm: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    mood: PropTypes.string,
+    price: PropTypes.number,
+    imageUrl: PropTypes.string,
+    audioUrl: PropTypes.string.isRequired,
+    isAvailable: PropTypes.bool.isRequired,
+  }).isRequired,
+  isPlaying: PropTypes.bool.isRequired,
+  onPlayPause: PropTypes.func.isRequired,
+  handleAddToCart: PropTypes.func.isRequired,
+  isAvailable: PropTypes.bool.isRequired,
+};
 
-FilterSelect.propTypes = {  
-  name: PropTypes.string.isRequired,  
-  label: PropTypes.string.isRequired,  
-  value: PropTypes.string.isRequired,  
-  handleChange: PropTypes.func.isRequired,  
-  options: PropTypes.arrayOf(PropTypes.string).isRequired,  
-};  
+FilterSelect.propTypes = {
+  name: PropTypes.string.isRequired,
+  label: PropTypes.string.isRequired,
+  value: PropTypes.string.isRequired,
+  handleChange: PropTypes.func.isRequired,
+  options: PropTypes.arrayOf(PropTypes.string).isRequired,
+};
 
-export default BeatsPage;  
+export default BeatsPage;
