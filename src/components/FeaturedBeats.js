@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from "react";  
 import PropTypes from "prop-types";  
 import { ShoppingCart } from "lucide-react";  
@@ -16,7 +17,11 @@ const saveCartItems = (cartItems) => {
     if (!acc.some((item) => item.id === curr.id)) acc.push(curr);  
     return acc;  
   }, []);  
-  localStorage.setItem("cartItems", JSON.stringify(uniqueCart));  
+  localStorage.setItem("cartItems", JSON.stringify(uniqueCart));
+  
+  // Update total amount whenever cart changes
+  const totalAmount = uniqueCart.reduce((sum, item) => sum + parseFloat(item.price || 0), 0);
+  localStorage.setItem("totalAmount", totalAmount.toString());
 };  
 
 const isBeatInCart = (beat) => getCartItems().some((item) => item.id === beat.id);  
@@ -38,11 +43,12 @@ const FeaturedBeats = ({ isLoggedIn }) => {
         const beatsQuery = query(beatsCollection, orderBy("createdAt", "desc"), limit(3)); // Fetch only top 3 most recent beats  
         const unsubscribe = onSnapshot(beatsQuery, (snapshot) => {  
           const fetchedBeats = snapshot.docs.map((doc) => ({  
-            id: doc.id,  
+            id: doc.id, // This is the Firestore document ID
             ...doc.data(),  
             imageUrl: doc.data().imageUrl || PLACEHOLDER_IMAGE, // Add default image if missing  
           }));  
-          setBeats(fetchedBeats);  
+          setBeats(fetchedBeats);
+          console.log('Fetched beats:', fetchedBeats); // Debug log
         });  
 
         return () => unsubscribe(); // Cleanup Firestore listener on unmount  
@@ -54,19 +60,69 @@ const FeaturedBeats = ({ isLoggedIn }) => {
     fetchBeats();  
   }, []);  
 
-  // Handles adding items to the cart  
+  // Handles adding items to the cart or direct purchase  
   const handleAddToCart = (beat) => {  
     if (isLoggedIn) {  
+      // Check if beat is sold out  
+      if (beat.isAvailable === false) {  
+        showPopupWithMessage(`"${beat.name}" is sold out and cannot be purchased.`, [  
+          { label: "Close", onClick: closePopup, className: "bg-red-500 hover:bg-red-600" },  
+        ]);  
+        return;  
+      }  
+
       if (isBeatInCart(beat)) {  
-        // If the beat is already in the cart  
+        // If the beat is already in the cart, offer to go to payment directly  
         showPopupWithMessage(`"${beat.name}" is already in your cart.`, [  
+          { 
+            label: "Buy Now", 
+            onClick: () => {
+              closePopup();
+              // Set up single beat purchase
+              localStorage.setItem("selectedBeatId", beat.id);
+              localStorage.setItem("totalAmount", beat.price.toString());
+              navigate("/payment");
+            }, 
+            className: "bg-green-500 hover:bg-green-600" 
+          },
           { label: "Close", onClick: closePopup, className: "bg-blue-500 hover:bg-blue-600" },  
         ]);  
       } else {  
-        // Add the beat to cart  
-        saveCartItems([...getCartItems(), beat]);  
+        // Create proper cart item structure
+        const cartItem = {
+          id: beat.id, // Use Firestore document ID
+          name: beat.name,
+          price: parseFloat(beat.price || 0),
+          genre: beat.genre,
+          bpm: beat.bpm,
+          mood: beat.mood,
+          imageUrl: beat.imageUrl,
+          audioUrl: beat.audioUrl,
+          isAvailable: beat.isAvailable
+        };
+        
+        // Add the beat to cart and offer direct purchase  
+        saveCartItems([...getCartItems(), cartItem]);
+        console.log('Added to cart:', cartItem); // Debug log
+        console.log('Cart after add:', getCartItems()); // Debug log
+        
         showPopupWithMessage(`"${beat.name}" has been added to your cart.`, [  
-          { label: "Close", onClick: closePopup, className: "bg-green-500 hover:bg-green-600" },  
+          { 
+            label: "Buy Now", 
+            onClick: () => {
+              closePopup();
+              // Set up single beat purchase
+              localStorage.setItem("selectedBeatId", beat.id);
+              localStorage.setItem("totalAmount", beat.price.toString());
+              navigate("/payment");
+            }, 
+            className: "bg-green-500 hover:bg-green-600" 
+          },
+          { 
+            label: "Continue Shopping", 
+            onClick: closePopup, 
+            className: "bg-blue-500 hover:bg-blue-600" 
+          },  
         ]);  
       }  
     } else {  
@@ -141,6 +197,9 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
     return "$0.00"; // Default value if price is invalid or missing  
   };  
 
+  // Check if beat is sold out
+  const isSoldOut = beat.isAvailable === false;
+
   useEffect(() => {  
     const audio = audioRef.current;  
 
@@ -201,6 +260,12 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
           className="w-full h-full object-cover rounded-t-lg absolute inset-0"  
           loading="lazy"  
         />  
+        {/* Sold out overlay */}
+        {isSoldOut && (
+          <div className="absolute inset-0 bg-black bg-opacity-75 flex items-center justify-center rounded-t-lg">
+            <span className="text-red-500 font-bold text-lg transform -rotate-12">SOLD OUT</span>
+          </div>
+        )}
       </div>  
       <div className="flex-1 w-full text-center flex flex-col justify-between">  
         <div>  
@@ -208,7 +273,11 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
           <p className="text-gray-300 text-sm truncate">  
             Genre: {beat.genre || "N/A"} | BPM: {beat.bpm || "N/A"} | Mood: {beat.mood || "N/A"}  
           </p>  
-          <p className="font-bold text-green-400 mt-1">{getFormattedPrice(beat.price)}</p>  
+          <p className={`font-bold mt-1 ${isSoldOut ? 'text-red-400' : 'text-green-400'}`}>
+            {isSoldOut ? 'SOLD OUT' : getFormattedPrice(beat.price)}
+          </p>
+          {/* Debug info - remove in production */}
+          <p className="text-xs text-gray-500 mt-1">ID: {beat.id}</p>
         </div>  
         <div className="mt-3">  
           <div className="flex items-center justify-center gap-4">  
@@ -232,11 +301,16 @@ const AudioPlayer = ({ beat, isPlaying, onPlayPause, onAddToCart }) => {
             style={{ background: `linear-gradient(to right, #4caf50 ${progress}%, #555 ${progress}%)` }}  
           />  
           <button  
-            className="mt-3 w-full px-4 py-2 bg-blue-500 text-white font-bold rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2 transition-colors duration-200"  
+            className={`mt-3 w-full px-4 py-2 font-bold rounded-lg flex items-center justify-center gap-2 transition-colors duration-200 ${
+              isSoldOut 
+                ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                : 'bg-blue-500 text-white hover:bg-blue-600'
+            }`}
             onClick={() => onAddToCart(beat)}  
+            disabled={isSoldOut}
           >  
             <ShoppingCart size={16} />  
-            Add to Cart  
+            {isSoldOut ? 'Sold Out' : 'Add to Cart'}
           </button>  
         </div>  
       </div>  
@@ -259,10 +333,11 @@ AudioPlayer.propTypes = {
     price: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),  
     imageUrl: PropTypes.string,  
     audioUrl: PropTypes.string, // Expect audioUrl  
+    isAvailable: PropTypes.bool, // Add isAvailable prop
   }).isRequired,  
   isPlaying: PropTypes.bool.isRequired,  
   onPlayPause: PropTypes.func.isRequired,  
   onAddToCart: PropTypes.func.isRequired,  
 };  
 
-export default FeaturedBeats;  
+export default FeaturedBeats;

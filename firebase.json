@@ -1,4 +1,4 @@
-{
+﻿{
   "firestore": {
     "database": "(default)",
     "rules": "firestore.rules",
@@ -14,9 +14,6 @@
         "firebase-debug.log",
         "firebase-debug.*.log",
         "*.local"
-      ],
-      "predeploy": [
-        "npm --prefix \"$RESOURCE_DIR\" run lint"
       ]
     }
   ],
@@ -29,9 +26,9 @@
       }
     ],
     "headers": [
-      { 
-        "source": "/**", 
-        "headers": [ 
+      {
+        "source": "/**",
+        "headers": [
           { "key": "X-Content-Type-Options", "value": "nosniff" },
           { "key": "X-Frame-Options", "value": "DENY" },
           { "key": "X-XSS-Protection", "value": "1; mode=block" }

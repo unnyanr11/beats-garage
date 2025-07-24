@@ -3,7 +3,7 @@ import PropTypes from "prop-types";
 import { useNavigate, useLocation } from "react-router-dom";  
 import { ShoppingCart } from "lucide-react";  
 import { db } from "../firebase";  
-import { collection, getDocs, doc, updateDoc } from "firebase/firestore"; // Import doc and updateDoc  
+import { collection, getDocs } from "firebase/firestore"; // Import doc and updateDoc  
 import Popup from "../pages/Popup";  
 
 // Constants  
@@ -18,8 +18,11 @@ const saveCartItems = (items) => {
     return acc;  
   }, []);  
   localStorage.setItem("cartItems", JSON.stringify(uniqueCart));  
-};  
-
+  
+  // Update total amount whenever cart changes
+  const totalAmount = uniqueCart.reduce((sum, item) => sum + parseFloat(item.price || 0), 0);
+  localStorage.setItem("totalAmount", totalAmount.toString());
+};
 const isBeatInCart = (beat) => getCartItems().some((item) => item.id === beat.id);  
 
 // BeatsPage Component  
@@ -150,64 +153,91 @@ const BeatsPage = ({ isLoggedIn }) => {
   };  
 
   const handleAddToCart = async (beat) => {  
-    if (isLoggedIn) {  
-      if (isBeatInCart(beat)) {  
-        showPopupWithMessage(`"${beat.name}" is already in your cart.`, [  
-          { label: "Close", className: "bg-blue-500 hover:bg-blue-600", onClick: closePopup },  
-        ]);  
-      } else {  
-        try {  
-          // Reference to the beat document in Firestore  
-          const beatDocRef = doc(db, "beats", beat.id);  
+  if (isLoggedIn) {  
+    // Check if beat is sold out
+    if (beat.isAvailable === false) {
+      showPopupWithMessage(`"${beat.name}" is sold out and cannot be purchased.`, [
+        { label: "Close", className: "bg-red-500 hover:bg-red-600", onClick: closePopup },
+      ]);
+      return;
+    }
 
-          // Update the isAvailable field to false  
-          await updateDoc(beatDocRef, { isAvailable: false });  
-
-          // Optimistically update the local state  
-          setBeats(currentBeats =>  
-            currentBeats.map(b =>  
-              b.id === beat.id ? { ...b, isAvailable: false } : b  
-            )  
-          );  
-          setFilteredBeats(currentFilteredBeats =>  
-            currentFilteredBeats.map(b =>  
-              b.id === beat.id ? { ...b, isAvailable: false } : b  
-            )  
-          );  
-
-          setReloadTrigger(prev => prev + 1);  
-
-          saveCartItems([...getCartItems(), beat]);  
-          showPopupWithMessage(`"${beat.name}" added to your cart!`, [  
-            { label: "Close", className: "bg-green-500 hover:bg-green-600", onClick: closePopup },  
-          ]);  
-        } catch (error) {  
-          console.error("Error updating beat availability:", error);  
-          showPopupWithMessage("Failed to update beat availability. Please try again.", [  
-            { label: "Close", className: "bg-red-500 hover:bg-red-600", onClick: closePopup },  
-          ]);  
-        }  
-      }  
-    } else {  
-      showPopupWithMessage(`Log in or sign up to buy "${beat.name}".`, [  
-        {  
-          label: "Log In",  
-          className: "bg-blue-500 hover:bg-blue-600",  
-          onClick: () => redirectTo("/login"),  
-        },  
-        {  
-          label: "Sign Up",  
-          className: "bg-green-500 hover:bg-green-600",  
-          onClick: () => redirectTo("/signup"),  
-        },  
-        {  
-          label: "Close",  
-          className: "bg-red-500 hover:bg-red-600",  
-          onClick: closePopup,  
-        },  
+    if (isBeatInCart(beat)) {  
+      showPopupWithMessage(`"${beat.name}" is already in your cart.`, [  
+        { 
+          label: "Buy Now", 
+          className: "bg-green-500 hover:bg-green-600", 
+          onClick: () => {
+            closePopup();
+            localStorage.setItem("selectedBeatId", beat.id);
+            localStorage.setItem("totalAmount", beat.price.toString());
+            navigate("/payment");
+          }
+        },
+        { label: "Close", className: "bg-blue-500 hover:bg-blue-600", onClick: closePopup },  
       ]);  
+    } else {  
+      try {  
+        // Create proper cart item structure
+        const cartItem = {
+          id: beat.id,
+          name: beat.name,
+          price: parseFloat(beat.price || 0),
+          genre: beat.genre,
+          bpm: beat.bpm,
+          mood: beat.mood,
+          imageUrl: beat.imageUrl,
+          audioUrl: beat.audioUrl,
+          isAvailable: beat.isAvailable
+        };
+
+        // Add to cart (DON'T update Firestore availability here)
+        saveCartItems([...getCartItems(), cartItem]);  
+
+        showPopupWithMessage(`"${beat.name}" added to your cart!`, [  
+          { 
+            label: "Buy Now", 
+            className: "bg-green-500 hover:bg-green-600", 
+            onClick: () => {
+              closePopup();
+              localStorage.setItem("selectedBeatId", beat.id);
+              localStorage.setItem("totalAmount", beat.price.toString());
+              navigate("/payment");
+            }
+          },
+          { 
+            label: "Continue Shopping", 
+            className: "bg-blue-500 hover:bg-blue-600", 
+            onClick: closePopup 
+          },  
+        ]);  
+      } catch (error) {  
+        console.error("Error adding beat to cart:", error);  
+        showPopupWithMessage("Failed to add beat to cart. Please try again.", [  
+          { label: "Close", className: "bg-red-500 hover:bg-red-600", onClick: closePopup },  
+        ]);  
+      }  
     }  
-  };  
+  } else {  
+    showPopupWithMessage(`Log in or sign up to buy "${beat.name}".`, [  
+      {  
+        label: "Log In",  
+        className: "bg-blue-500 hover:bg-blue-600",  
+        onClick: () => redirectTo("/login"),  
+      },  
+      {  
+        label: "Sign Up",  
+        className: "bg-green-500 hover:bg-green-600",  
+        onClick: () => redirectTo("/signup"),  
+      },  
+      {  
+        label: "Close",  
+        className: "bg-red-500 hover:bg-red-600",  
+        onClick: closePopup,  
+      },  
+    ]);  
+  }  
+};
 
   const showPopupWithMessage = (message, buttons) => {  
     setPopupMessage(message);  
